@@ -16,7 +16,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class JdbcDataStoreTest {
-
+    JdbcDataStore jdbcDataStore;
     @Test
     public void test() throws Exception {
 
@@ -45,6 +45,44 @@ public class JdbcDataStoreTest {
         assertEquals("should get empty list for non-existent parent", new ArrayList<String>(), jdbcDataStore.getChildrenNames("PARENT_NO_EXIST"));
         assertEquals("should get empty map for non-existent parent", new HashMap<String, String>(), jdbcDataStore.getAllChildren("PARENT_NO_EXIST"));
         jdbcDataStore.close();
+    }
+
+    //@Test
+    public void perfTest() throws  Exception {
+        jdbcDataStore = new JdbcDataStore("SpawnData1", "table2");
+        for (int i=0; i<10; i++) {
+            readTest(1000);
+            writeTest(1000);
+            readWriteTest(1000);
+        }
+
+    }
+
+    private void readTest(int reads) {
+        long now = System.currentTimeMillis();
+        for (int i=0; i<reads; i++) {
+            jdbcDataStore.get(Integer.toString(i));
+        }
+        System.out.println("read took " + (System.currentTimeMillis() - now));
+    }
+
+    private void writeTest(int writes) throws Exception {
+        long now = System.currentTimeMillis();
+        for (int i=0; i<writes; i++) {
+            jdbcDataStore.put(Integer.toString(i), Integer.toHexString(i));
+        }
+        System.out.println("writes took " + (System.currentTimeMillis() - now));
+
+    }
+
+    private void readWriteTest(int readWrites) throws Exception {
+        long now = System.currentTimeMillis();
+        for (int i=0; i<readWrites; i++) {
+            jdbcDataStore.get(Integer.toString(i));
+            jdbcDataStore.put(Integer.toString(readWrites - i), Integer.toHexString(i));
+        }
+        System.out.println("readwrites took " + (System.currentTimeMillis() - now));
+
     }
 
 

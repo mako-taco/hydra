@@ -51,7 +51,7 @@ public class JdbcDataStore implements SpawnDataStore {
     private PreparedStatement createStartupCommand() throws SQLException {
         return conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( "
                                      + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, "
-                                     + valueKey + " TEXT, "
+                                     + valueKey + " LONGTEXT, "
                                      + childKey + " VARCHAR(" + maxPathLength + "), "
                                      + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
         );
