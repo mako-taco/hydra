@@ -190,10 +190,10 @@ public class JdbcDataStore implements SpawnDataStore {
         String template = makeChildQueryTemplate(false);
         try {
             ResultSet resultSet = getResultsForQuery(template, path);
-            if (resultSet == null) {
-                return null;
-            }
             ArrayList<String> rv = new ArrayList<>();
+            if (resultSet == null) {
+                return rv;
+            }
             do {
                 rv.add(resultSet.getString(1));
             } while (resultSet.next());
@@ -207,11 +207,11 @@ public class JdbcDataStore implements SpawnDataStore {
     public Map<String, String> getAllChildren(String path) {
         String template = makeChildQueryTemplate(true);
         try {
+            HashMap<String, String> rv = new HashMap<>();
             ResultSet resultSet = getResultsForQuery(template, path);
             if (resultSet == null) {
-                return null;
+                return rv;
             }
-            HashMap<String, String> rv = new HashMap<>();
             do {
                 rv.put(resultSet.getString(1), resultSet.getString(2));
             } while (resultSet.next());
