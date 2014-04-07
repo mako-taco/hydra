@@ -33,7 +33,7 @@ public class JdbcDataStoreTest {
         assertEquals("should get latest value", val1, jdbcDataStore.get(key1));
         assertEquals("should correctly fetch value with extra characters", val2, jdbcDataStore.get(key2));
         Map<String, String> expected = ImmutableMap.of(key1, val1, key2, val2);
-        assertEquals("should get expected map from multi-fetch call", expected, jdbcDataStore.get(new String[]{key1, key2, "otherKey"}));
+        assertEquals("should get expected map from multi-fetch call", expected, jdbcDataStore.get(new String[]{key1, key2, "otherKey", "other'Key\nwithWeird;;';Characters"}));
         jdbcDataStore.putAsChild("parent", "child1", val1);
         jdbcDataStore.putAsChild("parent", "child2", "val2");
         jdbcDataStore.deleteChild("parent", "child2");

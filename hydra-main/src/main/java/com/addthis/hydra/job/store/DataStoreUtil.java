@@ -48,7 +48,7 @@ public class DataStoreUtil {
 
     private static final boolean useJdbcDataStore = Parameter.boolValue("spawn.jdbc.store", false);
     private static final String jdbcDbName = Parameter.value("spawn.jdbc.db", "SpawnData1");
-    private static final String jdbcTableName = Parameter.value("spawn.jdbc.db", "jdbc_datastore");
+    private static final String jdbcTableName = Parameter.value("spawn.jdbc.db", "jdbc_datastore2");
 
 
     /**
