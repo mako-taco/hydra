@@ -48,6 +48,7 @@ public class DataStoreUtil {
 
     private static final boolean useJdbcDataStore = Parameter.boolValue("spawn.jdbc.store", false);
     private static final String jdbcDbName = Parameter.value("spawn.jdbc.db", "SpawnData1");
+    private static final String jdbcTableName = Parameter.value("spawn.jdbc.db", "jdbc_datastore");
 
 
     /**
@@ -66,7 +67,7 @@ public class DataStoreUtil {
      * @return A SpawnDataStore of the appropriate implementation
      */
     public static SpawnDataStore makeSpawnDataStore(CuratorFramework zkClient) throws Exception {
-        return useJdbcDataStore ? new JdbcDataStore(jdbcDbName) : new ZookeeperDataStore(zkClient);
+        return useJdbcDataStore ? new JdbcDataStore(jdbcDbName, jdbcTableName) : new ZookeeperDataStore(zkClient);
     }
 
     /**
