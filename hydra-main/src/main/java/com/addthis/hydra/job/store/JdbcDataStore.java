@@ -11,6 +11,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.Strings;
 
 import com.addthis.codec.Codec;
@@ -20,17 +21,19 @@ public class JdbcDataStore implements SpawnDataStore {
     private final Connection conn;
     private static final String pathKey = "p";
     private static final String valueKey = "v";
-    private static final String dbName = "SpawnData";
+    private static final String dbName = "SpawnData1";
     private static final String tableName = "jdbc_datastore_v2";
     private static final String queryTemplate = "select ? from " + tableName;
-    private static final String insertTemplate = "insert into " + tableName + "(" + pathKey + "," + valueKey + ") values( ? , ? )";
+    private static final String insertTemplate = "insert into " + tableName + "(" + pathKey + "," + valueKey + ") values( ? , ? ) " +
+                                                 "on duplicate key update " + valueKey + "=values(" + valueKey + ")";
+    private static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
 
     public JdbcDataStore() throws Exception {
-        Class.forName("com.mysql.jdbc.Driver");
+        Class.forName("org.drizzle.jdbc.DrizzleDriver");
         Properties props = new Properties();
         props.put("user", "spawn");
         props.put("password", "pw");
-        conn = DriverManager.getConnection("jdbc:mysql://localhost:3306/SpawnData1", props);
+        conn = DriverManager.getConnection("jdbc:mysql:thin://localhost:3306/" + dbName, props);
         conn.setAutoCommit(false);
         createStartupCommand().execute();
         // Create database/table
@@ -38,7 +41,7 @@ public class JdbcDataStore implements SpawnDataStore {
     }
 
     private PreparedStatement createStartupCommand() throws SQLException {
-        return conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( id INT NOT NULL AUTO_INCREMENT, PRIMARY KEY(id), " +pathKey+ " TEXT NOT NULL, "+valueKey+" TEXT );");
+        return conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( " + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, PRIMARY KEY(" + pathKey + "), " + valueKey + " TEXT)");
 
     }
 
@@ -93,11 +96,13 @@ public class JdbcDataStore implements SpawnDataStore {
 
     @Override
     public void put(String path, String value) throws Exception {
+        if (path.length() > maxPathLength) {
+            throw new IllegalArgumentException("Input path longer than max of " + maxPathLength);
+        }
         // Update if exists already
         PreparedStatement preparedStatement = makeInsertStatement();
         preparedStatement.setString(1, path);
         preparedStatement.setString(2, value);
-        preparedStatement.addBatch();
         preparedStatement.execute();
         conn.commit();
     }

@@ -11,7 +11,9 @@ public class JdbcDataStoreTest {
 
         JdbcDataStore jdbcDataStore = new JdbcDataStore();
         jdbcDataStore.put("key6", "value6");
+        jdbcDataStore.put("key7", "value7!!!!'',',;';;'");
         System.out.println(jdbcDataStore.get("key5"));
+        System.out.println(jdbcDataStore.get("key6"));
         System.out.println(jdbcDataStore.get("key7"));
         // put, get, etc
         jdbcDataStore.close();
