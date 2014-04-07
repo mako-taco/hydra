@@ -18,7 +18,7 @@ public class JdbcDataStoreTest {
     @Test
     public void test() throws Exception {
 
-        JdbcDataStore jdbcDataStore = new JdbcDataStore();
+        JdbcDataStore jdbcDataStore = new JdbcDataStore("SpawnData1");
         String key1 = "key1";
         String val1 = "value1";
         String key2 = "key2";

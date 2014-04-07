@@ -13,13 +13,17 @@
  */
 package com.addthis.hydra.job.store;
 
-import com.addthis.hydra.query.AliasBiMap;
-import org.apache.curator.framework.CuratorFramework;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Arrays;
 import java.util.List;
+
+import com.addthis.basis.util.Parameter;
+
+import com.addthis.hydra.query.AliasBiMap;
+
+import org.apache.curator.framework.CuratorFramework;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.addthis.hydra.job.store.SpawnDataStoreKeys.SPAWN_BALANCE_PARAM_PATH;
 import static com.addthis.hydra.job.store.SpawnDataStoreKeys.SPAWN_COMMON_ALERT_PATH;
@@ -42,13 +46,16 @@ public class DataStoreUtil {
 
     private static final Logger log = LoggerFactory.getLogger(DataStoreUtil.class);
 
+    private static final boolean useJdbcDataStore = Parameter.boolValue("spawn.jdbc.store", false);
+    private static final String jdbcDbName = Parameter.value("spawn.jdbc.db", "SpawnData1");
+
 
     /**
      * Create the canonical SpawnDataStore.
      *
      * @return A SpawnDataStore of the appropriate implementation
      */
-    public static SpawnDataStore makeSpawnDataStore() {
+    public static SpawnDataStore makeSpawnDataStore() throws Exception {
         return makeSpawnDataStore(null);
     }
 
@@ -58,8 +65,8 @@ public class DataStoreUtil {
      * @param zkClient If non-null, use this ZkClient in the ZookeeperDataStore, if that is the standard
      * @return A SpawnDataStore of the appropriate implementation
      */
-    public static SpawnDataStore makeSpawnDataStore(CuratorFramework zkClient) {
-        return new ZookeeperDataStore(zkClient);
+    public static SpawnDataStore makeSpawnDataStore(CuratorFramework zkClient) throws Exception {
+        return useJdbcDataStore ? new JdbcDataStore(jdbcDbName) : new ZookeeperDataStore(zkClient);
     }
 
     /**
