@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Properties;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,16 +33,13 @@ public class JdbcDataStore implements SpawnDataStore {
     private static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
     private static final String blankChildId = "_";
 
-    public JdbcDataStore(String dbName, String tableName) throws Exception {
-        if (dbName == null || tableName == null) {
+    public JdbcDataStore(String dbPath, String tableName) throws Exception {
+        if (dbPath == null || tableName == null) {
             throw new NullPointerException("Null dbName/tableName passed to JdbcDataStore");
         }
         this.tableName = tableName;
-        Class.forName("org.drizzle.jdbc.DrizzleDriver");
-        Properties props = new Properties();
-        props.put("user", "spawn");
-        props.put("password", "pw");
-        conn = DriverManager.getConnection("jdbc:mysql:thin://localhost:3306/" + dbName, props);
+        Class.forName("org.h2.Driver");
+        conn = DriverManager.getConnection("jdbc:h2:" + dbPath);
         conn.setAutoCommit(false);
         createStartupCommand().execute();
     }
@@ -64,9 +60,12 @@ public class JdbcDataStore implements SpawnDataStore {
     }
 
     private PreparedStatement makeInsertStatement() throws SQLException {
-        String insertTemplate = "insert into " + tableName +
+        String insertTemplate = "merge into " + tableName +
                                 "(" + pathKey + "," + valueKey + "," + childKey + ") " +
-                                "values( ? , ? , ? ) on duplicate key update " + valueKey + "=values(" + valueKey + ")";
+                                "values( ? , ? , ? )";
+        // To make mysql compliant,
+        // - change "merge into" to "insert into "
+        // - add "on duplicate key update " + valueKey + "=values(" + valueKey + ")"
         return conn.prepareStatement(insertTemplate);
     }
 

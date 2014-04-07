@@ -1,15 +1,21 @@
 package com.addthis.hydra.job;
 
+import java.io.File;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.addthis.basis.util.Files;
 
 import com.addthis.hydra.job.store.JdbcDataStore;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -17,10 +23,26 @@ import static org.junit.Assert.assertNull;
 
 public class JdbcDataStoreTest {
     JdbcDataStore jdbcDataStore;
+    File tempDir;
+
+    @Before
+    public void setup() throws Exception {
+        tempDir = Files.createTempDir();
+        Class.forName("org.h2.Driver");
+        jdbcDataStore = new JdbcDataStore(tempDir.getCanonicalPath(), "testDb");
+
+    }
+
+    @After
+    public void cleanup() {
+        if (jdbcDataStore != null) {
+            jdbcDataStore.close();
+        }
+        Files.deleteDir(tempDir);
+    }
+
     @Test
     public void test() throws Exception {
-
-        JdbcDataStore jdbcDataStore = new JdbcDataStore("SpawnData1", "table2");
         String key1 = "key1";
         String val1 = "value1";
         String key2 = "key2";
@@ -44,10 +66,9 @@ public class JdbcDataStoreTest {
         assertEquals("should get expected children map", expectedChildrenMap, jdbcDataStore.getAllChildren("parent"));
         assertEquals("should get empty list for non-existent parent", new ArrayList<String>(), jdbcDataStore.getChildrenNames("PARENT_NO_EXIST"));
         assertEquals("should get empty map for non-existent parent", new HashMap<String, String>(), jdbcDataStore.getAllChildren("PARENT_NO_EXIST"));
-        jdbcDataStore.close();
     }
 
-    //@Test
+    @Test
     public void perfTest() throws  Exception {
         jdbcDataStore = new JdbcDataStore("SpawnData1", "table2");
         for (int i=0; i<10; i++) {
@@ -84,6 +105,5 @@ public class JdbcDataStoreTest {
         System.out.println("readwrites took " + (System.currentTimeMillis() - now));
 
     }
-
 
 }
