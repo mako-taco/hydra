@@ -1,5 +1,7 @@
 package com.addthis.hydra.job;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +42,8 @@ public class JdbcDataStoreTest {
         assertEquals("should get expected children list", expectedChildren, jdbcDataStore.getChildrenNames("parent"));
         Map<String, String> expectedChildrenMap = ImmutableMap.of("child1", val1, "child3", val2);
         assertEquals("should get expected children map", expectedChildrenMap, jdbcDataStore.getAllChildren("parent"));
+        assertEquals("should get empty list for non-existent parent", new ArrayList<String>(), jdbcDataStore.getChildrenNames("PARENT_NO_EXIST"));
+        assertEquals("should get empty map for non-existent parent", new HashMap<String, String>(), jdbcDataStore.getAllChildren("PARENT_NO_EXIST"));
         jdbcDataStore.close();
     }
 
