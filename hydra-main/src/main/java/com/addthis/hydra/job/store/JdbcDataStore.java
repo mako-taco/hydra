@@ -29,13 +29,16 @@ public class JdbcDataStore implements SpawnDataStore {
     private final Connection conn;
     private static final String pathKey = "path";
     private static final String valueKey = "val";
-    private static final String parentKey = "parent";
     private static final String childKey = "child";
-    private final String tableName = "jdbc_datastore_v4";
+    private final String tableName;
     private static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
-    private static final String parentChildSeparator = "|||";
+    private static final String blankChildId = "_";
 
-    public JdbcDataStore(String dbName) throws Exception {
+    public JdbcDataStore(String dbName, String tableName) throws Exception {
+        if (dbName == null || tableName == null) {
+            throw new NullPointerException("Null dbName/tableName passed to JdbcDataStore");
+        }
+        this.tableName = tableName;
         Class.forName("org.drizzle.jdbc.DrizzleDriver");
         Properties props = new Properties();
         props.put("user", "spawn");
@@ -47,10 +50,11 @@ public class JdbcDataStore implements SpawnDataStore {
 
     private PreparedStatement createStartupCommand() throws SQLException {
         return conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( "
-                                     + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, PRIMARY KEY(" + pathKey + "), "
+                                     + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, "
                                      + valueKey + " TEXT, "
-                                     + parentKey + " TEXT, "
-                                     + childKey + " TEXT )");
+                                     + childKey + " VARCHAR(" + maxPathLength + "), "
+                                     + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
+        );
 
     }
 
@@ -59,30 +63,19 @@ public class JdbcDataStore implements SpawnDataStore {
         return description;
     }
 
-    private PreparedStatement makeQueryStatement(String columns, String key, String value) throws SQLException {
-        PreparedStatement preparedStatement = conn.prepareStatement("select " + columns + " from " + tableName + " where " + key + "=?");
-        preparedStatement.setString(1, value);
-        return preparedStatement;
-    }
-
     private PreparedStatement makeInsertStatement() throws SQLException {
-        String insertTemplate = "insert into " + tableName + "(" + pathKey + "," + valueKey + "," + parentKey + "," + childKey + ") values( ? , ? , ? , ? ) on duplicate key update " + valueKey + "=values(" + valueKey + ")";
+        String insertTemplate = "insert into " + tableName +
+                                "(" + pathKey + "," + valueKey + "," + childKey + ") " +
+                                "values( ? , ? , ? ) on duplicate key update " + valueKey + "=values(" + valueKey + ")";
         return conn.prepareStatement(insertTemplate);
     }
 
     @Override
     public String get(String path) {
         try {
-            PreparedStatement preparedStatement = makeQueryStatement(valueKey, pathKey, path);
-            ResultSet resultSet = preparedStatement.executeQuery();
-            boolean foundRows = resultSet.next();
-            if (!foundRows) {
-                return null;
-            }
-            String firstResult = resultSet.getString(valueKey);
-            // If multiple rows found, what happens?
-            resultSet.close();
-            return firstResult;
+            PreparedStatement preparedStatement = conn.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey+ "=?");
+            preparedStatement.setString(1, path);
+            return getSingleResult(preparedStatement.executeQuery());
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -104,31 +97,26 @@ public class JdbcDataStore implements SpawnDataStore {
         return rv;
     }
 
-    private void insert(String path, String value, String parent, String childId) throws SQLException {
-        if (path.length() > maxPathLength) {
+    private void insert(String path, String value, String childId) throws SQLException {
+        if (path.length() > maxPathLength || (childId != null && childId.length() > maxPathLength)) {
             throw new IllegalArgumentException("Input path longer than max of " + maxPathLength);
         }
         PreparedStatement preparedStatement = makeInsertStatement();
         preparedStatement.setString(1, path);
         preparedStatement.setString(2, value);
-        preparedStatement.setString(3, parent);
-        preparedStatement.setString(4, childId);
+        preparedStatement.setString(3, childId != null ? childId : blankChildId);
         preparedStatement.execute();
         conn.commit();
     }
 
     @Override
     public void put(String path, String value) throws Exception {
-        insert(path, value, null, null);
-    }
-
-    private static String makeChildKey(String parent, String childId) {
-        return parent + parentChildSeparator + childId;
+        insert(path, value, null);
     }
 
     @Override
     public void putAsChild(String parent, String childId, String value) throws Exception {
-        insert(makeChildKey(parent, childId), value, parent, childId);
+        insert(parent, value, childId);
     }
 
     @Override
@@ -148,20 +136,43 @@ public class JdbcDataStore implements SpawnDataStore {
 
     }
 
+    private static String getSingleResult(ResultSet resultSet) throws SQLException {
+        boolean foundRows = resultSet.next();
+        if (!foundRows) {
+            return null;
+        }
+        String firstResult = resultSet.getString(valueKey);
+        // If multiple rows found, what happens?
+        resultSet.close();
+        return firstResult;
+    }
+
     @Override
     public String getChild(String parent, String childId) throws Exception {
-        return get(makeChildKey(parent, childId));
+        PreparedStatement preparedStatement = conn.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey+ "=? and " + childKey + "=?");
+        preparedStatement.setString(1, parent);
+        preparedStatement.setString(2, childId);
+        return getSingleResult(preparedStatement.executeQuery());
+
     }
 
     @Override
     public void deleteChild(String parent, String childId) {
-        delete(makeChildKey(parent, childId));
+        try {
+            String deleteTemplate = "delete from " + tableName + " where " + pathKey + "=? and " + childKey + "=?";
+            PreparedStatement preparedStatement = conn.prepareStatement(deleteTemplate);
+            preparedStatement.setString(1, parent);
+            preparedStatement.setString(2, childId);
+            preparedStatement.execute();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Override
     public void delete(String path) {
         try {
-            String deleteTemplate = "delete from " + tableName + " where " + pathKey + "= ?";
+            String deleteTemplate = "delete from " + tableName + " where " + pathKey + "=?";
             PreparedStatement preparedStatement = conn.prepareStatement(deleteTemplate);
             preparedStatement.setString(1, path);
             preparedStatement.execute();
@@ -171,7 +182,7 @@ public class JdbcDataStore implements SpawnDataStore {
     }
 
     private String makeChildQueryTemplate(boolean includeChildValues) {
-        return "select " + childKey + (includeChildValues ? "," + valueKey : "") + " from " + tableName + " where " + parentKey + "= ?";
+        return "select " + childKey + (includeChildValues ? "," + valueKey : "") + " from " + tableName + " where " + pathKey + "=?";
     }
 
     private ResultSet getResultsForQuery(String template, String path) throws SQLException {
