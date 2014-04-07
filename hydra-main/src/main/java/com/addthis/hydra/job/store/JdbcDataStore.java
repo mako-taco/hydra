@@ -88,13 +88,28 @@ public class JdbcDataStore implements SpawnDataStore {
             return null;
         }
         Map<String, String> rv = new HashMap<>();
-        for (String path : paths) {
-            String val = get(path);
-            if (val != null) {
-                rv.put(path, val);
-            }
+        StringBuilder sb = new StringBuilder();
+        sb.append("select " + (pathKey + "," + valueKey) + " from " + tableName);
+        boolean started = false;
+        for (int i=0; i<paths.length; i++) {
+            sb.append((started ? " or " : " where ") + pathKey + "=?");
+            started = true;
         }
-        return rv;
+        try {
+            PreparedStatement preparedStatement = conn.prepareStatement(sb.toString());
+            int j=1;
+            for (String path : paths) {
+                preparedStatement.setString(j++, path);
+            }
+            ResultSet resultSet = preparedStatement.executeQuery();
+            resultSet.next();
+            do {
+                rv.put(resultSet.getString(pathKey), resultSet.getString(valueKey));
+            } while(resultSet.next());
+            return rv;
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private void insert(String path, String value, String childId) throws SQLException {
@@ -172,7 +187,7 @@ public class JdbcDataStore implements SpawnDataStore {
     @Override
     public void delete(String path) {
         try {
-            String deleteTemplate = "delete from " + tableName + " where " + pathKey + "=?";
+            String deleteTemplate = "delete from " + tableName;
             PreparedStatement preparedStatement = conn.prepareStatement(deleteTemplate);
             preparedStatement.setString(1, path);
             preparedStatement.execute();
