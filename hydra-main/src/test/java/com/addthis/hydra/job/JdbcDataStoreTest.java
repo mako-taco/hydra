@@ -9,6 +9,7 @@ import java.util.Map;
 
 import com.addthis.basis.util.Files;
 
+import com.addthis.hydra.job.store.H2DataStore;
 import com.addthis.hydra.job.store.JdbcDataStore;
 
 import com.google.common.collect.ImmutableList;
@@ -29,7 +30,7 @@ public class JdbcDataStoreTest {
     public void setup() throws Exception {
         tempDir = Files.createTempDir();
         Class.forName("org.h2.Driver");
-        jdbcDataStore = new JdbcDataStore(tempDir.getCanonicalPath(), "testDb");
+        jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
 
     }
 
@@ -70,7 +71,6 @@ public class JdbcDataStoreTest {
 
     //@Test
     public void perfTest() throws  Exception {
-        jdbcDataStore = new JdbcDataStore("SpawnData1", "table2");
         for (int i=0; i<10; i++) {
             readTest(1000);
             writeTest(1000);

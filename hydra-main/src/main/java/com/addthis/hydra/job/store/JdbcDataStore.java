@@ -6,7 +6,6 @@ import java.util.List;
 import java.util.Map;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -21,30 +20,18 @@ import com.addthis.maljson.JSONException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class JdbcDataStore implements SpawnDataStore {
+public abstract class JdbcDataStore implements SpawnDataStore {
     private static Logger log = LoggerFactory.getLogger(JdbcDataStore.class);
     private static final CodecJSON codecJSON = new CodecJSON();
-    private static final String description = "jdbc_v1";
-    private final Connection conn;
-    private static final String pathKey = "path";
-    private static final String valueKey = "val";
-    private static final String childKey = "child";
-    private final String tableName;
+    protected Connection conn;
+    protected static final String pathKey = "path";
+    protected static final String valueKey = "val";
+    protected static final String childKey = "child";
+    protected String tableName;
     private static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
-    private static final String blankChildId = "_";
+    protected static final String blankChildId = "_";
 
-    public JdbcDataStore(String dbPath, String tableName) throws Exception {
-        if (dbPath == null || tableName == null) {
-            throw new NullPointerException("Null dbName/tableName passed to JdbcDataStore");
-        }
-        this.tableName = tableName;
-        Class.forName("org.h2.Driver");
-        conn = DriverManager.getConnection("jdbc:h2:" + dbPath);
-        conn.setAutoCommit(false);
-        createStartupCommand().execute();
-    }
-
-    private PreparedStatement createStartupCommand() throws SQLException {
+    protected PreparedStatement createStartupCommand() throws SQLException {
         return conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( "
                                      + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, "
                                      + valueKey + " LONGTEXT, "
@@ -54,20 +41,7 @@ public class JdbcDataStore implements SpawnDataStore {
 
     }
 
-    @Override
-    public String getDescription() {
-        return description;
-    }
-
-    private PreparedStatement makeInsertStatement() throws SQLException {
-        String insertTemplate = "merge into " + tableName +
-                                "(" + pathKey + "," + valueKey + "," + childKey + ") " +
-                                "values( ? , ? , ? )";
-        // To make mysql compliant,
-        // - change "merge into" to "insert into "
-        // - add "on duplicate key update " + valueKey + "=values(" + valueKey + ")"
-        return conn.prepareStatement(insertTemplate);
-    }
+    protected abstract PreparedStatement makeInsertStatement(String path, String value, String childId) throws SQLException;
 
     @Override
     public String get(String path) {
@@ -115,10 +89,7 @@ public class JdbcDataStore implements SpawnDataStore {
         if (path.length() > maxPathLength || (childId != null && childId.length() > maxPathLength)) {
             throw new IllegalArgumentException("Input path longer than max of " + maxPathLength);
         }
-        PreparedStatement preparedStatement = makeInsertStatement();
-        preparedStatement.setString(1, path);
-        preparedStatement.setString(2, value);
-        preparedStatement.setString(3, childId != null ? childId : blankChildId);
+        PreparedStatement preparedStatement = makeInsertStatement(path, value, childId);
         preparedStatement.execute();
         conn.commit();
     }

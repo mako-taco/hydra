@@ -20,8 +20,6 @@ import com.addthis.basis.util.Parameter;
 
 import com.addthis.hydra.query.AliasBiMap;
 
-import org.apache.curator.framework.CuratorFramework;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,35 +44,29 @@ public class DataStoreUtil {
 
     private static final Logger log = LoggerFactory.getLogger(DataStoreUtil.class);
 
-    private static final boolean useJdbcDataStore = Parameter.boolValue("spawn.jdbc.store", false);
-    private static final String jdbcDbPath = Parameter.value("spawn.jdbc.db.path", "etc/spawndatastore");
-    private static final String jdbcTableName = Parameter.value("spawn.jdbc.table.name", "jdbc_datastore3");
+    private static final String canonicalDataStoreType = Parameter.value("spawn.jdbc.store.type", "ZK");
+    private static final String h2DbPath = Parameter.value("spawn.jdbc.db.path", "etc/spawndatastore");
+    private static final String tableName = Parameter.value("spawn.table.name", "datastoretable");
+    private static final String mysqlDbName = Parameter.value("spawn.mysql.db.name", "spawndatastore");
+    private static final String mysqlHostName = Parameter.value("spawn.mysql.host", "localhost");
+    private static final int mysqlPort = Parameter.intValue("spawn.mysql.port", 3306);
 
-    public static enum DataStoreType {ZK, JDBC}
+    public static enum DataStoreType {ZK, MYSQL, H2}
 
     /**
-     * Create the canonical SpawnDataStore.
+     * Create the canonical SpawnDataStore based on the system parameters
      *
      * @return A SpawnDataStore of the appropriate implementation
      */
-    public static SpawnDataStore makeSpawnDataStore() throws Exception {
-        return makeCanonicalSpawnDataStore(null);
-    }
-
-    /**
-     * Create the canonical SpawnDataStore using the provided zkClient, if appropriate
-     *
-     * @param zkClient If non-null, use this ZkClient in the ZookeeperDataStore, if that is the standard
-     * @return A SpawnDataStore of the appropriate implementation
-     */
-    public static SpawnDataStore makeCanonicalSpawnDataStore(CuratorFramework zkClient) throws Exception {
-        return useJdbcDataStore ? new JdbcDataStore(jdbcDbPath, jdbcTableName) : new ZookeeperDataStore(zkClient);
+    public static SpawnDataStore makeCanonicalSpawnDataStore() throws Exception {
+        return makeSpawnDataStore(DataStoreType.valueOf(canonicalDataStoreType));
     }
 
     public static SpawnDataStore makeSpawnDataStore(DataStoreType type) throws Exception {
         switch (type) {
             case ZK: return new ZookeeperDataStore(null);
-            case JDBC: return new JdbcDataStore(jdbcDbPath, jdbcTableName);
+            case MYSQL: return new MysqlDataStore(mysqlHostName, mysqlPort, mysqlDbName, tableName);
+            case H2: return new H2DataStore(h2DbPath, tableName);
             default: throw new IllegalArgumentException("Unexpected DataStoreType " + type);
         }
     }
