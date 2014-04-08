@@ -42,7 +42,7 @@ public class SpawnStateTest extends ZkStartUtil {
         try {
             logDir = Files.createTempDir();
             System.setProperty("SPAWN_LOG_DIR", logDir.getCanonicalPath());
-            SpawnDataStore spawnDataStore = DataStoreUtil.makeSpawnDataStore(zkClient);
+            SpawnDataStore spawnDataStore = DataStoreUtil.makeCanonicalSpawnDataStore(zkClient);
             spawnDataStore.delete(SPAWN_COMMON_COMMAND_PATH); // Clear out command path
         } catch (Exception e) {
             e.printStackTrace();

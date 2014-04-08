@@ -50,6 +50,7 @@ public class DataStoreUtil {
     private static final String jdbcDbPath = Parameter.value("spawn.jdbc.db.path", "etc/spawndatastore");
     private static final String jdbcTableName = Parameter.value("spawn.jdbc.table.name", "jdbc_datastore3");
 
+    public static enum DataStoreType {ZK, JDBC}
 
     /**
      * Create the canonical SpawnDataStore.
@@ -57,7 +58,7 @@ public class DataStoreUtil {
      * @return A SpawnDataStore of the appropriate implementation
      */
     public static SpawnDataStore makeSpawnDataStore() throws Exception {
-        return makeSpawnDataStore(null);
+        return makeCanonicalSpawnDataStore(null);
     }
 
     /**
@@ -66,8 +67,16 @@ public class DataStoreUtil {
      * @param zkClient If non-null, use this ZkClient in the ZookeeperDataStore, if that is the standard
      * @return A SpawnDataStore of the appropriate implementation
      */
-    public static SpawnDataStore makeSpawnDataStore(CuratorFramework zkClient) throws Exception {
+    public static SpawnDataStore makeCanonicalSpawnDataStore(CuratorFramework zkClient) throws Exception {
         return useJdbcDataStore ? new JdbcDataStore(jdbcDbPath, jdbcTableName) : new ZookeeperDataStore(zkClient);
+    }
+
+    public static SpawnDataStore makeSpawnDataStore(DataStoreType type) throws Exception {
+        switch (type) {
+            case ZK: return new ZookeeperDataStore(null);
+            case JDBC: return new JdbcDataStore(jdbcDbPath, jdbcTableName);
+            default: throw new IllegalArgumentException("Unexpected DataStoreType " + type);
+        }
     }
 
     /**
@@ -77,7 +86,7 @@ public class DataStoreUtil {
      * @param targetDataStore The new datastore to push data to
      * @throws Exception If any part of the cutover fails
      */
-    private static void cutoverBetweenDataStore(SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore) throws Exception {
+    public static void cutoverBetweenDataStore(SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore) throws Exception {
         log.warn("Beginning cutover from " + sourceDataStore.getDescription() + " to " + targetDataStore.getDescription());
         for (String value : pathsToImport) {
             importValue(value, sourceDataStore, targetDataStore);
