@@ -68,7 +68,7 @@ public class JdbcDataStoreTest {
         assertEquals("should get empty map for non-existent parent", new HashMap<String, String>(), jdbcDataStore.getAllChildren("PARENT_NO_EXIST"));
     }
 
-    @Test
+    //@Test
     public void perfTest() throws  Exception {
         jdbcDataStore = new JdbcDataStore("SpawnData1", "table2");
         for (int i=0; i<10; i++) {

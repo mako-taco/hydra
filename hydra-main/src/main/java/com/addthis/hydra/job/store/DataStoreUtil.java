@@ -38,17 +38,17 @@ import static com.addthis.hydra.job.store.SpawnDataStoreKeys.SPAWN_QUEUE_PATH;
 public class DataStoreUtil {
 
     /* A list of datastore paths with values that should be cutover */
-    private static final List<String> pathsToImport = Arrays.asList(SPAWN_QUEUE_PATH, SPAWN_COMMON_ALERT_PATH, SPAWN_BALANCE_PARAM_PATH);
+    private static final List<String> pathsToImport = Arrays.asList(SPAWN_QUEUE_PATH, SPAWN_BALANCE_PARAM_PATH);
     /* A list of datastore parent nodes with children that should be cutover */
-    private static final List<String> parentsToImport = Arrays.asList(SPAWN_COMMON_COMMAND_PATH, SPAWN_COMMON_MACRO_PATH, SPAWN_JOB_CONFIG_PATH, AliasBiMap.ALIAS_PATH);
+    private static final List<String> parentsToImport = Arrays.asList(SPAWN_COMMON_COMMAND_PATH, SPAWN_COMMON_MACRO_PATH, SPAWN_JOB_CONFIG_PATH, AliasBiMap.ALIAS_PATH, SPAWN_COMMON_ALERT_PATH);
     /* A list of nodes beneath each job node */
     private static final List<String> jobParametersToImport = Arrays.asList("config", "queryconfig", "tasks", "alerts");
 
     private static final Logger log = LoggerFactory.getLogger(DataStoreUtil.class);
 
     private static final boolean useJdbcDataStore = Parameter.boolValue("spawn.jdbc.store", false);
-    private static final String jdbcDbName = Parameter.value("spawn.jdbc.db", "SpawnData1");
-    private static final String jdbcTableName = Parameter.value("spawn.jdbc.db", "jdbc_datastore3");
+    private static final String jdbcDbPath = Parameter.value("spawn.jdbc.db.path", "etc/spawndatastore");
+    private static final String jdbcTableName = Parameter.value("spawn.jdbc.table.name", "jdbc_datastore3");
 
 
     /**
@@ -67,7 +67,7 @@ public class DataStoreUtil {
      * @return A SpawnDataStore of the appropriate implementation
      */
     public static SpawnDataStore makeSpawnDataStore(CuratorFramework zkClient) throws Exception {
-        return useJdbcDataStore ? new JdbcDataStore(jdbcDbName, jdbcTableName) : new ZookeeperDataStore(zkClient);
+        return useJdbcDataStore ? new JdbcDataStore(jdbcDbPath, jdbcTableName) : new ZookeeperDataStore(zkClient);
     }
 
     /**
