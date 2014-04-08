@@ -20,6 +20,7 @@ public class MysqlDataStore extends JdbcDataStore {
         props.put("user", "spawn");
         props.put("password", "pw");
         conn = DriverManager.getConnection("jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, props);
+        createStartupCommand().execute();
     }
 
     @Override

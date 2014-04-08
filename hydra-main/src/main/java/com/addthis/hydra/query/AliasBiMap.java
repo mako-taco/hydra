@@ -62,7 +62,7 @@ public class AliasBiMap {
     private AvailableCache<String> mapCache;
 
     public AliasBiMap() throws Exception {
-        this(DataStoreUtil.makeSpawnDataStore());
+        this(DataStoreUtil.makeCanonicalSpawnDataStore());
         loadCurrentValues();
     }
 

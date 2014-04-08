@@ -46,7 +46,7 @@ public class JobConfigManagerTest extends ZkStartUtil {
 
     private JobConfigManager getJobConfigManager() throws Exception {
         if (spawnDataStore == null) {
-            spawnDataStore = DataStoreUtil.makeCanonicalSpawnDataStore(zkClient);
+            spawnDataStore = DataStoreUtil.makeCanonicalSpawnDataStore();
         }
         if (jobConfigManager == null) {
             jobConfigManager = new JobConfigManager(spawnDataStore);
