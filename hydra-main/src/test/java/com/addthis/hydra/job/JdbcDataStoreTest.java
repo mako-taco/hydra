@@ -11,6 +11,7 @@ import com.addthis.basis.util.Files;
 
 import com.addthis.hydra.job.store.H2DataStore;
 import com.addthis.hydra.job.store.MysqlDataStore;
+import com.addthis.hydra.job.store.PostgresqlDataStore;
 import com.addthis.hydra.job.store.SpawnDataStore;
 
 import com.google.common.collect.ImmutableList;
@@ -39,6 +40,9 @@ public class JdbcDataStoreTest {
     @Test
     public void runCorrectnessTest() throws Exception {
         SpawnDataStore jdbcDataStore;
+        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable");
+        testDataStore(jdbcDataStore);
+        jdbcDataStore.close();
         jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
         testDataStore(jdbcDataStore);
         jdbcDataStore.close();
@@ -77,6 +81,9 @@ public class JdbcDataStoreTest {
     public void perfTest() throws Exception {
         for (int i=0; i<5; i++) {
             SpawnDataStore jdbcDataStore;
+            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable");
+            performanceTestDataStore(jdbcDataStore);
+            jdbcDataStore.close();
             jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();

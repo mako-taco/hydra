@@ -28,7 +28,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
     protected static final String valueKey = "val";
     protected static final String childKey = "child";
     protected String tableName;
-    private static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
+    protected static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
     protected static final String blankChildId = "_";
 
     protected PreparedStatement createStartupCommand() throws SQLException {
@@ -38,7 +38,6 @@ public abstract class JdbcDataStore implements SpawnDataStore {
                                      + childKey + " VARCHAR(" + maxPathLength + "), "
                                      + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
         );
-
     }
 
     protected abstract PreparedStatement makeInsertStatement(String path, String value, String childId) throws SQLException;
