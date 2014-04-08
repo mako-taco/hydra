@@ -10,7 +10,8 @@ import java.util.Map;
 import com.addthis.basis.util.Files;
 
 import com.addthis.hydra.job.store.H2DataStore;
-import com.addthis.hydra.job.store.JdbcDataStore;
+import com.addthis.hydra.job.store.MysqlDataStore;
+import com.addthis.hydra.job.store.SpawnDataStore;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -23,27 +24,30 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class JdbcDataStoreTest {
-    JdbcDataStore jdbcDataStore;
     File tempDir;
 
     @Before
     public void setup() throws Exception {
         tempDir = Files.createTempDir();
-        Class.forName("org.h2.Driver");
-        jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
-
     }
 
     @After
     public void cleanup() {
-        if (jdbcDataStore != null) {
-            jdbcDataStore.close();
-        }
         Files.deleteDir(tempDir);
     }
 
     @Test
-    public void test() throws Exception {
+    public void runCorrectnessTest() throws Exception {
+        SpawnDataStore jdbcDataStore;
+        jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
+        testDataStore(jdbcDataStore);
+        jdbcDataStore.close();
+        jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable");
+        testDataStore(jdbcDataStore);
+        jdbcDataStore.close();
+    }
+
+    public void testDataStore(SpawnDataStore jdbcDataStore) throws Exception {
         String key1 = "key1";
         String val1 = "value1";
         String key2 = "key2";
@@ -69,40 +73,60 @@ public class JdbcDataStoreTest {
         assertEquals("should get empty map for non-existent parent", new HashMap<String, String>(), jdbcDataStore.getAllChildren("PARENT_NO_EXIST"));
     }
 
-    //@Test
-    public void perfTest() throws  Exception {
-        for (int i=0; i<10; i++) {
-            readTest(1000);
-            writeTest(1000);
-            readWriteTest(1000);
+    @Test
+    public void perfTest() throws Exception {
+        for (int i=0; i<5; i++) {
+            SpawnDataStore jdbcDataStore;
+            jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
+            performanceTestDataStore(jdbcDataStore);
+            jdbcDataStore.close();
+            jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable");
+            performanceTestDataStore(jdbcDataStore);
+            jdbcDataStore.close();
         }
 
     }
 
-    private void readTest(int reads) {
+    public void performanceTestDataStore(SpawnDataStore spawnDataStore) throws  Exception {
+        long readSum = 0;
+        long writeSum = 0;
+        long readWriteSum = 0;
+        int tries = 10;
+        for (int i=0; i<tries; i++) {
+            readSum += readTest(spawnDataStore, 1000);
+            writeSum += writeTest(spawnDataStore, 1000);
+            readWriteSum += readWriteTest(spawnDataStore, 1000);
+        }
+        System.out.println(spawnDataStore.getDescription() + " average read time: " + readSum / tries);
+        System.out.println(spawnDataStore.getDescription() + " average write time: " + writeSum / tries);
+        System.out.println(spawnDataStore.getDescription() + " average readwrite time: " + readWriteSum / tries);
+
+    }
+
+    private long readTest(SpawnDataStore jdbcDataStore, int reads) {
         long now = System.currentTimeMillis();
         for (int i=0; i<reads; i++) {
             jdbcDataStore.get(Integer.toString(i));
         }
-        System.out.println("read took " + (System.currentTimeMillis() - now));
+        return (System.currentTimeMillis() - now);
     }
 
-    private void writeTest(int writes) throws Exception {
+    private long writeTest(SpawnDataStore jdbcDataStore, int writes) throws Exception {
         long now = System.currentTimeMillis();
         for (int i=0; i<writes; i++) {
             jdbcDataStore.put(Integer.toString(i), Integer.toHexString(i));
         }
-        System.out.println("writes took " + (System.currentTimeMillis() - now));
+        return (System.currentTimeMillis() - now);
 
     }
 
-    private void readWriteTest(int readWrites) throws Exception {
+    private long readWriteTest(SpawnDataStore jdbcDataStore, int readWrites) throws Exception {
         long now = System.currentTimeMillis();
         for (int i=0; i<readWrites; i++) {
             jdbcDataStore.get(Integer.toString(i));
             jdbcDataStore.put(Integer.toString(readWrites - i), Integer.toHexString(i));
         }
-        System.out.println("readwrites took " + (System.currentTimeMillis() - now));
+        return (System.currentTimeMillis() - now);
 
     }
 
