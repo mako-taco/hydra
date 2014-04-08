@@ -177,7 +177,12 @@
       <groupId>com.h2database</groupId>
       <artifactId>h2</artifactId>
       <version>1.3.176</version>
-    </dependency>        
+    </dependency>
+    <dependency>
+        <groupId>postgresql</groupId>
+        <artifactId>postgresql</artifactId>
+        <version>9.1-902.jdbc4</version>
+    </dependency>            
     <!-- end 3rd party deps -->
     <!-- test deps -->
     <!-- end test deps -->
