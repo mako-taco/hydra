@@ -51,8 +51,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import java.text.ParseException;
 
-import com.addthis.bark.StringSerializer;
-import com.addthis.bark.ZkUtil;
 import com.addthis.basis.net.HttpUtil;
 import com.addthis.basis.util.Bytes;
 import com.addthis.basis.util.Files;
@@ -61,6 +59,8 @@ import com.addthis.basis.util.Parameter;
 import com.addthis.basis.util.Strings;
 import com.addthis.basis.util.TokenReplacerOverflowException;
 
+import com.addthis.bark.StringSerializer;
+import com.addthis.bark.ZkUtil;
 import com.addthis.codec.Codec;
 import com.addthis.codec.CodecJSON;
 import com.addthis.hydra.job.backup.ScheduledBackupType;
@@ -113,6 +113,7 @@ import com.yammer.metrics.core.Meter;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.KeeperException;
+
 import org.codehaus.jackson.map.ObjectMapper;
 import org.eclipse.jetty.server.Server;
 import org.slf4j.Logger;
@@ -277,7 +278,7 @@ public class Spawn implements Codec.Codable {
         if (useZk) {
             log.info("[init] starting zkclient, config manager, and listening for minions");
             this.zkClient = zkClient;
-            this.spawnDataStore = DataStoreUtil.makeCanonicalSpawnDataStore(zkClient);
+            this.spawnDataStore = DataStoreUtil.makeCanonicalSpawnDataStore();
             this.jobConfigManager = new JobConfigManager(this.spawnDataStore);
             this.minionMembers = new SetMembershipListener(zkClient, MINION_UP_PATH);
             this.deadMinionMembers = new SetMembershipListener(zkClient, MINION_DEAD_PATH);
@@ -296,7 +297,7 @@ public class Spawn implements Codec.Codable {
                                     SpawnFormattedLogger.createFileBasedLogger(new File(SPAWN_STRUCTURED_LOG_DIR)) :
                                     SpawnFormattedLogger.createNullLogger();
         this.zkClient = ZkUtil.makeStandardClient();
-        this.spawnDataStore = DataStoreUtil.makeCanonicalSpawnDataStore(zkClient);
+        this.spawnDataStore = DataStoreUtil.makeCanonicalSpawnDataStore();
         File statefile = new File(dataDir, stateFilePath);
         if (statefile.exists() && statefile.isFile()) {
             codec.decode(this, Files.read(statefile));
