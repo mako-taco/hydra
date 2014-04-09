@@ -1,8 +1,10 @@
 package com.addthis.hydra.job;
 
 import java.io.File;
+import java.io.IOException;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,46 +97,60 @@ public class JdbcDataStoreTest {
     }
 
     public void performanceTestDataStore(SpawnDataStore spawnDataStore) throws  Exception {
-        long readSum = 0;
-        long writeSum = 0;
-        long readWriteSum = 0;
+        long readSmallSum = 0;
+        long writeSmallSum = 0;
+        long readWriteSmallSum = 0;
+        long readBigSum = 0;
+        long writeBigSum = 0;
+        long readWriteBigSum = 0;
         int tries = 10;
+        int numReadWrites = 50;
         for (int i=0; i<tries; i++) {
-            readSum += readTest(spawnDataStore, 1000);
-            writeSum += writeTest(spawnDataStore, 1000);
-            readWriteSum += readWriteTest(spawnDataStore, 1000);
+            writeSmallSum += writeTest(spawnDataStore, numReadWrites, false);
+            readSmallSum += readTest(spawnDataStore, numReadWrites, false);
+            readWriteSmallSum += readWriteTest(spawnDataStore, numReadWrites, false);
+            writeBigSum += writeTest(spawnDataStore, numReadWrites, true);
+            readBigSum += readTest(spawnDataStore, numReadWrites, true);
+            readWriteBigSum += readWriteTest(spawnDataStore, numReadWrites, true);
         }
-        System.out.println(spawnDataStore.getDescription() + " average read time: " + readSum / tries);
-        System.out.println(spawnDataStore.getDescription() + " average write time: " + writeSum / tries);
-        System.out.println(spawnDataStore.getDescription() + " average readwrite time: " + readWriteSum / tries);
-
+        System.out.println(spawnDataStore.getDescription() + Arrays.asList(readSmallSum, writeSmallSum, readWriteSmallSum, readBigSum, writeBigSum, readWriteBigSum));
     }
 
-    private long readTest(SpawnDataStore jdbcDataStore, int reads) {
+    private long readTest(SpawnDataStore jdbcDataStore, int reads, boolean big) {
         long now = System.currentTimeMillis();
         for (int i=0; i<reads; i++) {
-            jdbcDataStore.get(Integer.toString(i));
+            jdbcDataStore.get(Integer.toString(i) + (big ? "big" : ""));
         }
         return (System.currentTimeMillis() - now);
     }
 
-    private long writeTest(SpawnDataStore jdbcDataStore, int writes) throws Exception {
+    private long writeTest(SpawnDataStore jdbcDataStore, int writes, boolean big) throws Exception {
         long now = System.currentTimeMillis();
         for (int i=0; i<writes; i++) {
-            jdbcDataStore.put(Integer.toString(i), Integer.toHexString(i));
+            jdbcDataStore.put(Integer.toString(i) + (big ? "big" : ""), Integer.toHexString(i) + (big ? bigString : ""));
         }
         return (System.currentTimeMillis() - now);
 
     }
 
-    private long readWriteTest(SpawnDataStore jdbcDataStore, int readWrites) throws Exception {
+    private long readWriteTest(SpawnDataStore jdbcDataStore, int readWrites, boolean big) throws Exception {
         long now = System.currentTimeMillis();
         for (int i=0; i<readWrites; i++) {
             jdbcDataStore.get(Integer.toString(i));
-            jdbcDataStore.put(Integer.toString(readWrites - i), Integer.toHexString(i));
+            jdbcDataStore.put(Integer.toString(i) + (big ? "big" : ""), Integer.toHexString(i) + (big ? bigString : ""));
         }
         return (System.currentTimeMillis() - now);
 
     }
+    private final static String bigString;
+    static {
+        try {
+            byte[] bytes = Files.read(new File("/Users/al/big.txt"));
+            bigString = new String(bytes);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 
 }
