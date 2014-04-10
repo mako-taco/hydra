@@ -11,10 +11,12 @@ import java.util.Map;
 
 import com.addthis.basis.util.Files;
 
+import com.addthis.bark.ZkUtil;
 import com.addthis.hydra.job.store.H2DataStore;
 import com.addthis.hydra.job.store.MysqlDataStore;
 import com.addthis.hydra.job.store.PostgresqlDataStore;
 import com.addthis.hydra.job.store.SpawnDataStore;
+import com.addthis.hydra.job.store.ZookeeperDataStore;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -27,6 +29,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 public class JdbcDataStoreTest {
+
     File tempDir;
 
     @Before
@@ -42,18 +45,18 @@ public class JdbcDataStoreTest {
     @Test
     public void runCorrectnessTest() throws Exception {
         SpawnDataStore jdbcDataStore;
-        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable");
-        testDataStore(jdbcDataStore);
+        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable2");
+        correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
         jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
-        testDataStore(jdbcDataStore);
+        correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
         jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable");
-        testDataStore(jdbcDataStore);
+        correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
     }
 
-    public void testDataStore(SpawnDataStore jdbcDataStore) throws Exception {
+    public void correctnessTestDataStore(SpawnDataStore jdbcDataStore) throws Exception {
         String key1 = "key1";
         String val1 = "value1";
         String key2 = "key2";
@@ -66,6 +69,12 @@ public class JdbcDataStoreTest {
         assertEquals("should get latest value", val1, jdbcDataStore.get(key1));
         assertEquals("should correctly fetch value with extra characters", val2, jdbcDataStore.get(key2));
         Map<String, String> expected = ImmutableMap.of(key1, val1, key2, val2);
+
+        String nullKey = "nullkey";
+        jdbcDataStore.put(nullKey, "val");
+        jdbcDataStore.put(nullKey, null);
+        assertNull("should get null for key insterted as null", jdbcDataStore.get(nullKey));
+
         assertEquals("should get expected map from multi-fetch call", expected, jdbcDataStore.get(new String[]{key1, key2, "otherKey", "other'Key\nwithWeird;;';Characters"}));
         jdbcDataStore.putAsChild("parent", "child1", val1);
         jdbcDataStore.putAsChild("parent", "child2", "val2");
@@ -81,9 +90,12 @@ public class JdbcDataStoreTest {
 
     @Test
     public void perfTest() throws Exception {
-        for (int i=0; i<5; i++) {
+        for (int i = 0; i < 5; i++) {
             SpawnDataStore jdbcDataStore;
-            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable");
+            jdbcDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
+            performanceTestDataStore(jdbcDataStore);
+            jdbcDataStore.close();
+            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable2");
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();
             jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
@@ -96,7 +108,7 @@ public class JdbcDataStoreTest {
 
     }
 
-    public void performanceTestDataStore(SpawnDataStore spawnDataStore) throws  Exception {
+    public void performanceTestDataStore(SpawnDataStore spawnDataStore) throws Exception {
         long readSmallSum = 0;
         long writeSmallSum = 0;
         long readWriteSmallSum = 0;
@@ -105,7 +117,7 @@ public class JdbcDataStoreTest {
         long readWriteBigSum = 0;
         int tries = 10;
         int numReadWrites = 50;
-        for (int i=0; i<tries; i++) {
+        for (int i = 0; i < tries; i++) {
             writeSmallSum += writeTest(spawnDataStore, numReadWrites, false);
             readSmallSum += readTest(spawnDataStore, numReadWrites, false);
             readWriteSmallSum += readWriteTest(spawnDataStore, numReadWrites, false);
@@ -118,16 +130,16 @@ public class JdbcDataStoreTest {
 
     private long readTest(SpawnDataStore jdbcDataStore, int reads, boolean big) {
         long now = System.currentTimeMillis();
-        for (int i=0; i<reads; i++) {
-            jdbcDataStore.get(Integer.toString(i) + (big ? "big" : ""));
+        for (int i = 0; i < reads; i++) {
+            jdbcDataStore.get("/" + Integer.toString(i) + (big ? "big" : ""));
         }
         return (System.currentTimeMillis() - now);
     }
 
     private long writeTest(SpawnDataStore jdbcDataStore, int writes, boolean big) throws Exception {
         long now = System.currentTimeMillis();
-        for (int i=0; i<writes; i++) {
-            jdbcDataStore.put(Integer.toString(i) + (big ? "big" : ""), Integer.toHexString(i) + (big ? bigString : ""));
+        for (int i = 0; i < writes; i++) {
+            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigString : Integer.toHexString(i)));
         }
         return (System.currentTimeMillis() - now);
 
@@ -135,14 +147,17 @@ public class JdbcDataStoreTest {
 
     private long readWriteTest(SpawnDataStore jdbcDataStore, int readWrites, boolean big) throws Exception {
         long now = System.currentTimeMillis();
-        for (int i=0; i<readWrites; i++) {
-            jdbcDataStore.get(Integer.toString(i));
-            jdbcDataStore.put(Integer.toString(i) + (big ? "big" : ""), Integer.toHexString(i) + (big ? bigString : ""));
+
+        for (int i = 0; i < readWrites; i++) {
+            jdbcDataStore.get("/" + Integer.toString(i));
+            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigString : Integer.toHexString(i)));
         }
         return (System.currentTimeMillis() - now);
 
     }
+
     private final static String bigString;
+
     static {
         try {
             byte[] bytes = Files.read(new File("/Users/al/big.txt"));
