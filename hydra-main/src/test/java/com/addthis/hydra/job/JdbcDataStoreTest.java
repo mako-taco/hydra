@@ -31,6 +31,19 @@ import static org.junit.Assert.assertNull;
 public class JdbcDataStoreTest {
 
     File tempDir;
+    private static final String bigValueSourceFilePath = "/Users/al/big.txt"; // Modify to point to a local file. Largest values used by clusters are around 150 KB.
+
+
+    private final static String bigString;
+
+    static {
+        try {
+            byte[] bytes = Files.read(new File(bigValueSourceFilePath));
+            bigString = new String(bytes);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 
     @Before
     public void setup() throws Exception {
@@ -95,7 +108,7 @@ public class JdbcDataStoreTest {
             jdbcDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();
-            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable7");
+            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable10");
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();
             jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
@@ -154,17 +167,6 @@ public class JdbcDataStoreTest {
         }
         return (System.currentTimeMillis() - now);
 
-    }
-
-    private final static String bigString;
-
-    static {
-        try {
-            byte[] bytes = Files.read(new File("/Users/al/big.txt"));
-            bigString = new String(bytes);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
     }
 
 
