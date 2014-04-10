@@ -42,12 +42,18 @@ public abstract class JdbcDataStore implements SpawnDataStore {
 
     protected abstract PreparedStatement makeInsertStatement(String path, String value, String childId) throws SQLException;
 
+    protected PreparedStatement makeSelectStatement(String path) throws SQLException {
+        PreparedStatement preparedStatement = conn.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey + "=?");
+        preparedStatement.setString(1, path);
+        return preparedStatement;
+    }
+
     @Override
     public String get(String path) {
         try {
             PreparedStatement preparedStatement = conn.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey+ "=?");
             preparedStatement.setString(1, path);
-            return getSingleResult(preparedStatement.executeQuery());
+            return getSingleResult(makeSelectStatement(path).executeQuery());
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -55,7 +61,6 @@ public abstract class JdbcDataStore implements SpawnDataStore {
 
     @Override
     public Map<String, String> get(String[] paths) {
-        // Should be possible to get multiple values from a single query.
         if (paths == null) {
             return null;
         }
@@ -126,7 +131,10 @@ public abstract class JdbcDataStore implements SpawnDataStore {
             return null;
         }
         String firstResult = resultSet.getString(valueKey);
-        // If multiple rows found, what happens?
+        boolean moreResults = resultSet.next();
+        if (moreResults) {
+            throw new RuntimeException("Found multiple results after expecting a unique result; bailing");
+        }
         resultSet.close();
         return firstResult;
     }
@@ -165,11 +173,11 @@ public abstract class JdbcDataStore implements SpawnDataStore {
         }
     }
 
-    private String makeChildQueryTemplate(boolean includeChildValues) {
+    protected String makeChildQueryTemplate(boolean includeChildValues) {
         return "select " + childKey + (includeChildValues ? "," + valueKey : "") + " from " + tableName + " where " + pathKey + "=?";
     }
 
-    private ResultSet getResultsForQuery(String template, String path) throws SQLException {
+    protected ResultSet getResultsForQuery(String template, String path) throws SQLException {
         PreparedStatement preparedStatement = conn.prepareStatement(template);
         preparedStatement.setString(1, path);
         ResultSet resultSet = preparedStatement.executeQuery();

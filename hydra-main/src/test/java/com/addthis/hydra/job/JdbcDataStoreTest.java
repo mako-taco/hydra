@@ -45,7 +45,7 @@ public class JdbcDataStoreTest {
     @Test
     public void runCorrectnessTest() throws Exception {
         SpawnDataStore jdbcDataStore;
-        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable2");
+        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable24");
         correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
         jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
@@ -95,7 +95,7 @@ public class JdbcDataStoreTest {
             jdbcDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();
-            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable2");
+            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable7");
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();
             jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
