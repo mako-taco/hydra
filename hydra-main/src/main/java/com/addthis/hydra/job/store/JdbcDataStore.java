@@ -1,5 +1,6 @@
 package com.addthis.hydra.job.store;
 
+import java.sql.Blob;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -17,6 +18,8 @@ import com.addthis.codec.CodecExceptionLineNumber;
 import com.addthis.codec.CodecJSON;
 import com.addthis.maljson.JSONException;
 
+import com.ning.compress.lzf.LZFDecoder;
+import com.ning.compress.lzf.LZFException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,7 +37,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
     protected PreparedStatement createStartupCommand() throws SQLException {
         return conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( "
                                      + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, "
-                                     + valueKey + " LONGTEXT, "
+                                     + valueKey + " MEDIUMBLOB, "
                                      + childKey + " VARCHAR(" + maxPathLength + "), "
                                      + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
         );
@@ -130,7 +133,13 @@ public abstract class JdbcDataStore implements SpawnDataStore {
         if (!foundRows) {
             return null;
         }
-        String firstResult = resultSet.getString(valueKey);
+        Blob b = resultSet.getBlob(valueKey);
+        String firstResult = null;
+        try {
+            firstResult = new String(LZFDecoder.decode(b.getBytes(1l, (int) b.length())));
+        } catch (LZFException e) {
+            e.printStackTrace();
+        }
         boolean moreResults = resultSet.next();
         if (moreResults) {
             throw new RuntimeException("Found multiple results after expecting a unique result; bailing");

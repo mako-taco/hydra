@@ -1,10 +1,20 @@
 package com.addthis.hydra.job.store;
 
+import com.ning.compress.lzf.LZFEncoder;
+import com.ning.compress.lzf.LZFInputStream;
+import io.netty.buffer.ByteBufInputStream;
+import org.xerial.snappy.SnappyInputStream;
+
+import javax.sql.rowset.serial.SerialBlob;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.sql.Blob;
 import java.util.Properties;
 
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.zip.GZIPInputStream;
 
 public class MysqlDataStore extends JdbcDataStore {
     private static final String description = "mysql";
@@ -30,7 +40,7 @@ public class MysqlDataStore extends JdbcDataStore {
                                 "values( ? , ? , ? ) on duplicate key update " + valueKey + "=values(" + valueKey + ")";
         PreparedStatement preparedStatement = conn.prepareStatement(insertTemplate);
         preparedStatement.setString(1, path);
-        preparedStatement.setString(2, value);
+        preparedStatement.setBlob(2, new SerialBlob(LZFEncoder.encode(value.getBytes())));
         preparedStatement.setString(3, childId != null ? childId : blankChildId);
         return preparedStatement;
     }
