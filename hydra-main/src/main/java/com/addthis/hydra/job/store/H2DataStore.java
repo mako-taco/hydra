@@ -1,5 +1,8 @@
 package com.addthis.hydra.job.store;
 
+import com.ning.compress.lzf.LZFEncoder;
+
+import javax.sql.rowset.serial.SerialBlob;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -25,7 +28,7 @@ public class H2DataStore extends JdbcDataStore {
                                 "values( ? , ? , ? )";
         PreparedStatement preparedStatement = conn.prepareStatement(insertTemplate);
         preparedStatement.setString(1, path);
-        preparedStatement.setString(2, value);
+        preparedStatement.setBlob(2, new SerialBlob(LZFEncoder.encode(value.getBytes())));
         preparedStatement.setString(3, childId != null ? childId : blankChildId);
         return preparedStatement;
     }
