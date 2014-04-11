@@ -8,6 +8,9 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import com.addthis.basis.util.Files;
 
@@ -20,6 +23,7 @@ import com.addthis.hydra.job.store.ZookeeperDataStore;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.util.concurrent.MoreExecutors;
 
 import org.junit.After;
 import org.junit.Before;
@@ -167,6 +171,30 @@ public class JdbcDataStoreTest {
         }
         return (System.currentTimeMillis() - now);
 
+    }
+
+    private static final int CONCURRENT_THREADS = 20;
+
+    private long concurrentTest(final SpawnDataStore jdbcDataStore, int readWrites, final boolean big) throws Exception {
+        ExecutorService executorService = MoreExecutors.getExitingExecutorService(new ScheduledThreadPoolExecutor(CONCURRENT_THREADS));
+        for (int i=0; i<readWrites; i++) {
+            final int j = i;
+            executorService.submit(new Runnable() {
+                @Override
+                public void run() {
+                    jdbcDataStore.get("/" + Integer.toString(j));
+                    try {
+                        jdbcDataStore.put("/" + Integer.toString(j) + (big ? "big" : ""), (big ? bigString : Integer.toHexString(j)));
+                    } catch (Exception e) {
+                        System.out.println("EXECUTOR THREAD EXCEPTION: " + e);
+                    }
+                }
+            });
+        }
+        long now = System.currentTimeMillis();
+        executorService.shutdown();
+        executorService.awaitTermination(30, TimeUnit.SECONDS);
+        return System.currentTimeMillis() - now;
     }
 
 
