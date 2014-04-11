@@ -62,7 +62,7 @@ public class JdbcDataStoreTest {
     @Test
     public void runCorrectnessTest() throws Exception {
         SpawnDataStore jdbcDataStore;
-        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable24");
+        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable27");
         correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
         jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
