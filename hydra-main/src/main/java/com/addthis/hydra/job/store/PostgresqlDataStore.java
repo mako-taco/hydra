@@ -1,12 +1,8 @@
 package com.addthis.hydra.job.store;
 
-import javax.sql.rowset.serial.SerialBlob;
-
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
-
-import com.ning.compress.lzf.LZFEncoder;
 
 public class PostgresqlDataStore extends JdbcDataStore {
 
@@ -51,7 +47,7 @@ public class PostgresqlDataStore extends JdbcDataStore {
         childId = childId != null ? childId : blankChildId;
         PreparedStatement preparedStatement = conn.prepareStatement(insertTemplate);
         preparedStatement.setString(1, path);
-        preparedStatement.setBlob(2, new SerialBlob(LZFEncoder.encode(value.getBytes())));
+        preparedStatement.setBlob(2, valueToBlob(value));
         preparedStatement.setString(3, childId);
         return preparedStatement;
     }

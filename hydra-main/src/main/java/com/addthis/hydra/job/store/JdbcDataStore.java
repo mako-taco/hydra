@@ -1,11 +1,13 @@
 package com.addthis.hydra.job.store;
 
-import java.sql.Blob;
+import javax.sql.rowset.serial.SerialBlob;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -19,7 +21,9 @@ import com.addthis.codec.CodecJSON;
 import com.addthis.maljson.JSONException;
 
 import com.ning.compress.lzf.LZFDecoder;
+import com.ning.compress.lzf.LZFEncoder;
 import com.ning.compress.lzf.LZFException;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -84,10 +88,15 @@ public abstract class JdbcDataStore implements SpawnDataStore {
             ResultSet resultSet = preparedStatement.executeQuery();
             resultSet.next();
             do {
-                rv.put(resultSet.getString(pathKey), resultSet.getString(valueKey));
+                Blob blob =  resultSet.getBlob(valueKey);
+                if (blob != null) {
+                    rv.put(resultSet.getString(pathKey), blobToValue(blob));
+                }
             } while(resultSet.next());
             return rv;
         } catch (SQLException e) {
+            throw new RuntimeException(e);
+        } catch (LZFException e) {
             throw new RuntimeException(e);
         }
     }
@@ -128,17 +137,24 @@ public abstract class JdbcDataStore implements SpawnDataStore {
 
     }
 
-    private static String getSingleResult(ResultSet resultSet) throws SQLException {
+    protected Blob getValueBlobFromResultSet(ResultSet resultSet) throws SQLException {
+        // Needs to be overwritten in MysqlDataStore to get around an annoying drizzle bug
+        return resultSet.getBlob(valueKey);
+    }
+
+    private String getSingleResult(ResultSet resultSet) throws SQLException {
         boolean foundRows = resultSet.next();
         if (!foundRows) {
             return null;
         }
-        Blob b = resultSet.getBlob(valueKey);
+        Blob b = getValueBlobFromResultSet(resultSet);
         String firstResult = null;
-        try {
-            firstResult = new String(LZFDecoder.decode(b.getBytes(1l, (int) b.length())));
-        } catch (LZFException e) {
-            e.printStackTrace();
+        if (b != null) {
+            try {
+                firstResult = blobToValue(b);
+            } catch (LZFException e) {
+                throw new RuntimeException(e);
+            }
         }
         boolean moreResults = resultSet.next();
         if (moreResults) {
@@ -225,13 +241,26 @@ public abstract class JdbcDataStore implements SpawnDataStore {
                 return rv;
             }
             do {
-                rv.put(resultSet.getString(1), resultSet.getString(2));
+                Blob blob = resultSet.getBlob(2);
+                if (blob != null) {
+                    rv.put(resultSet.getString(1), blobToValue(blob));
+                }
             } while (resultSet.next());
             return rv;
         } catch (SQLException e) {
             throw new RuntimeException(e);
+        } catch (LZFException e) {
+            throw new RuntimeException(e);
         }
 
+    }
+
+    protected static Blob valueToBlob(String value) throws SQLException {
+        return value != null ? new SerialBlob(LZFEncoder.encode(value.getBytes())) : null;
+    }
+
+    protected static String blobToValue(Blob blob) throws SQLException, LZFException {
+        return blob != null ? new String(LZFDecoder.decode(blob.getBytes(1l, (int) blob.length()))) : null;
     }
 
     @Override
