@@ -1,7 +1,8 @@
 package com.addthis.hydra.job.store;
 
+import java.util.Properties;
+
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
@@ -9,18 +10,10 @@ public class PostgresqlDataStore extends JdbcDataStore {
 
     private static final String description = "postgres";
     private final String insertTemplate;
-    private final String host;
-    private final int port;
-    private final String dbName;
-
 
     public PostgresqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
+        super("org.postgresql.Driver", "jdbc:postgresql://" + host + ":" + port + "/" + dbName, new Properties());
         this.tableName = tableName;
-        this.host = host;
-        this.port = port;
-        this.dbName = dbName;
-        Class.forName("org.postgresql.Driver");
-
         insertTemplate = "WITH new_values (" + pathKey + ", " + valueKey + ", " + childKey + ") as (values (?, ?, ?)),\n" +
                          "upsert as( \n" +
                          "    update " + tableName + " m \n" +
@@ -35,14 +28,7 @@ public class PostgresqlDataStore extends JdbcDataStore {
                          "                  FROM upsert up \n" +
                          "                  WHERE up." + pathKey + " = new_values." + pathKey +" AND up." + childKey + " = new_values." + childKey + ")";
         runStartupCommand();
-    }
 
-
-    @Override
-    protected Connection getConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
-        connection.setAutoCommit(false);
-        return connection;
     }
 
     @Override
