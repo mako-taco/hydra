@@ -62,7 +62,7 @@ public class JdbcDataStoreTest {
     @Test
     public void runCorrectnessTest() throws Exception {
         SpawnDataStore jdbcDataStore;
-        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable27");
+        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable28");
         correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
         jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
@@ -90,7 +90,7 @@ public class JdbcDataStoreTest {
         String nullKey = "nullkey";
         jdbcDataStore.put(nullKey, "val");
         jdbcDataStore.put(nullKey, null);
-        assertNull("should get null for key insterted as null", jdbcDataStore.get(nullKey));
+        assertNull("should get null for key inserted as null", jdbcDataStore.get(nullKey));
 
         assertEquals("should get expected map from multi-fetch call", expected, jdbcDataStore.get(new String[]{key1, key2, "otherKey", "other'Key\nwithWeird;;';Characters"}));
         jdbcDataStore.putAsChild("parent", "child1", val1);
