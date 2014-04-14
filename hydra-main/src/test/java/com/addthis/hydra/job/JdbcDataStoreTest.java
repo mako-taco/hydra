@@ -1,7 +1,6 @@
 package com.addthis.hydra.job;
 
 import java.io.File;
-import java.io.IOException;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +19,8 @@ import com.addthis.hydra.job.store.MysqlDataStore;
 import com.addthis.hydra.job.store.PostgresqlDataStore;
 import com.addthis.hydra.job.store.SpawnDataStore;
 import com.addthis.hydra.job.store.ZookeeperDataStore;
+import com.addthis.maljson.JSONException;
+import com.addthis.maljson.JSONObject;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -35,18 +36,22 @@ import static org.junit.Assert.assertNull;
 public class JdbcDataStoreTest {
 
     File tempDir;
-    private static final String bigValueSourceFilePath = "/Users/al/big.txt"; // Modify to point to a local file. Largest values used by clusters are around 150 KB.
-
-
-    private final static String bigString;
+    /**
+     * A big string to use as a test value. Constructed as a JSON map in order to simulate the things Spawn typically stores.
+     */
+    private final static String bigJsonString;
 
     static {
+        int bigStringKeys = 8000;
+        JSONObject obj = new JSONObject();
         try {
-            byte[] bytes = Files.read(new File(bigValueSourceFilePath));
-            bigString = new String(bytes);
-        } catch (IOException e) {
+            for (int i=0; i<bigStringKeys; i++) {
+                obj.put("key" + i, "val" + i);
+            }
+        } catch (JSONException e) {
             throw new RuntimeException(e);
         }
+        bigJsonString = obj.toString();
     }
 
     @Before
@@ -156,7 +161,7 @@ public class JdbcDataStoreTest {
     private long writeTest(SpawnDataStore jdbcDataStore, int writes, boolean big) throws Exception {
         long now = System.currentTimeMillis();
         for (int i = 0; i < writes; i++) {
-            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigString : Integer.toHexString(i)));
+            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigJsonString : Integer.toHexString(i)));
         }
         return (System.currentTimeMillis() - now);
 
@@ -167,7 +172,7 @@ public class JdbcDataStoreTest {
 
         for (int i = 0; i < readWrites; i++) {
             jdbcDataStore.get("/" + Integer.toString(i));
-            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigString : Integer.toHexString(i)));
+            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigJsonString : Integer.toHexString(i)));
         }
         return (System.currentTimeMillis() - now);
 
@@ -186,7 +191,7 @@ public class JdbcDataStoreTest {
             jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "CCtesttable2");
             concurrentTest(jdbcDataStore, readWrites, false);
             jdbcDataStore.close();
-            jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "CCtest2");
+            jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "CCtest3");
             concurrentTest(jdbcDataStore, readWrites, false);
             jdbcDataStore.close();
             jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "CCtesttable2");
@@ -207,7 +212,7 @@ public class JdbcDataStoreTest {
                     public void run() {
                         String key = "/" + Integer.toString(j) + (big ? "big" : "");
                         try {
-                            jdbcDataStore.put(key, (big ? bigString : Integer.toHexString(j)));
+                            jdbcDataStore.put(key, (big ? bigJsonString : Integer.toHexString(j)));
                             jdbcDataStore.get(key);
                         } catch (Exception e) {
                             System.out.println("EXECUTOR THREAD EXCEPTION: " + e);
@@ -220,7 +225,7 @@ public class JdbcDataStoreTest {
             executorService.awaitTermination(30, TimeUnit.SECONDS);
             long rv = System.currentTimeMillis() - now;
             for (int i=0; i<readWrites; i++) {
-                assertEquals(jdbcDataStore.get("/" + Integer.toString(i) + (big ? "big" : "")), (big ? bigString : Integer.toHexString(i)));
+                assertEquals( (big ? bigJsonString : Integer.toHexString(i)), jdbcDataStore.get("/" + Integer.toString(i) + (big ? "big" : "")));
             }
             System.out.println(jdbcDataStore.getDescription() + ": " + rv);
         } catch (Exception ex) {

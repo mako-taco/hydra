@@ -48,7 +48,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
         cpds.setDriverClass(driverClass);
         cpds.setJdbcUrl(jdbcUrl);
         cpds.setMinPoolSize(minPoolSize);
-        cpds.setMaxPoolSize(20);
+        cpds.setMaxPoolSize(maxPoolSize);
         cpds.setProperties(properties);
     }
 
@@ -280,5 +280,6 @@ public abstract class JdbcDataStore implements SpawnDataStore {
 
     @Override
     public void close() {
+        cpds.close();
     }
 }
