@@ -1,5 +1,6 @@
 package com.addthis.hydra.job.store;
 
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -8,13 +9,18 @@ public class PostgresqlDataStore extends JdbcDataStore {
 
     private static final String description = "postgres";
     private final String insertTemplate;
+    private final String host;
+    private final int port;
+    private final String dbName;
 
 
     public PostgresqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
         this.tableName = tableName;
+        this.host = host;
+        this.port = port;
+        this.dbName = dbName;
         Class.forName("org.postgresql.Driver");
-        conn = DriverManager.getConnection("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
-        conn.setAutoCommit(false);
+
         insertTemplate = "WITH new_values (" + pathKey + ", " + valueKey + ", " + childKey + ") as (values (?, ?, ?)),\n" +
                          "upsert as( \n" +
                          "    update " + tableName + " m \n" +
@@ -28,28 +34,40 @@ public class PostgresqlDataStore extends JdbcDataStore {
                          "WHERE NOT EXISTS (SELECT 1 \n" +
                          "                  FROM upsert up \n" +
                          "                  WHERE up." + pathKey + " = new_values." + pathKey +" AND up." + childKey + " = new_values." + childKey + ")";
-        createStartupCommand().execute();
+        runStartupCommand();
+    }
+
+
+    @Override
+    protected Connection getConnection() throws SQLException {
+        Connection connection = DriverManager.getConnection("jdbc:postgresql://" + host + ":" + port + "/" + dbName);
+        connection.setAutoCommit(false);
+        return connection;
     }
 
     @Override
-    protected PreparedStatement createStartupCommand() throws SQLException {
-        return conn.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( "
-                                     + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, "
-                                     + valueKey + " TEXT, "
-                                     + childKey + " VARCHAR(" + maxPathLength + "), "
-                                     + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
-        );
-
+    protected void runStartupCommand() throws SQLException {
+        try (Connection connection = getConnection()) {
+            connection.prepareStatement("CREATE TABLE IF NOT EXISTS " + tableName + "( "
+                                        + pathKey + " VARCHAR(" + maxPathLength + ") NOT NULL, "
+                                        + valueKey + " TEXT, "
+                                        + childKey + " VARCHAR(" + maxPathLength + "), "
+                                        + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
+            );
+        }
     }
 
     @Override
-    protected PreparedStatement makeInsertStatement(String path, String value, String childId) throws SQLException {
+    protected void runInsert(String path, String value, String childId) throws SQLException {
         childId = childId != null ? childId : blankChildId;
-        PreparedStatement preparedStatement = conn.prepareStatement(insertTemplate);
-        preparedStatement.setString(1, path);
-        preparedStatement.setBlob(2, valueToBlob(value));
-        preparedStatement.setString(3, childId);
-        return preparedStatement;
+        try (Connection connection = getConnection()) {
+            PreparedStatement preparedStatement = connection.prepareStatement(insertTemplate);
+            preparedStatement.setString(1, path);
+            preparedStatement.setBlob(2, valueToBlob(value));
+            preparedStatement.setString(3, childId);
+            preparedStatement.execute();
+            connection.commit();
+        }
     }
 
     @Override

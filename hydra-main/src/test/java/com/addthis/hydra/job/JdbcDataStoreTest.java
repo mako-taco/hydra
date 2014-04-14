@@ -175,26 +175,59 @@ public class JdbcDataStoreTest {
 
     private static final int CONCURRENT_THREADS = 20;
 
-    private long concurrentTest(final SpawnDataStore jdbcDataStore, int readWrites, final boolean big) throws Exception {
-        ExecutorService executorService = MoreExecutors.getExitingExecutorService(new ScheduledThreadPoolExecutor(CONCURRENT_THREADS));
-        for (int i=0; i<readWrites; i++) {
-            final int j = i;
-            executorService.submit(new Runnable() {
-                @Override
-                public void run() {
-                    jdbcDataStore.get("/" + Integer.toString(j));
-                    try {
-                        jdbcDataStore.put("/" + Integer.toString(j) + (big ? "big" : ""), (big ? bigString : Integer.toHexString(j)));
-                    } catch (Exception e) {
-                        System.out.println("EXECUTOR THREAD EXCEPTION: " + e);
-                    }
-                }
-            });
+    @Test
+    public void concurCorrectnessTest() throws Exception {
+        for (int i = 0; i < 5; i++) {
+            int readWrites = 80;
+            SpawnDataStore jdbcDataStore;
+            jdbcDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
+            concurrentTest(jdbcDataStore, readWrites, false);
+            jdbcDataStore.close();
+            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "CCtesttable2");
+            concurrentTest(jdbcDataStore, readWrites, false);
+            jdbcDataStore.close();
+            jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "CCtest2");
+            concurrentTest(jdbcDataStore, readWrites, false);
+            jdbcDataStore.close();
+            jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "CCtesttable2");
+            concurrentTest(jdbcDataStore, readWrites, false);
+            jdbcDataStore.close();
         }
-        long now = System.currentTimeMillis();
-        executorService.shutdown();
-        executorService.awaitTermination(30, TimeUnit.SECONDS);
-        return System.currentTimeMillis() - now;
+    }
+
+
+
+    private void concurrentTest(final SpawnDataStore jdbcDataStore, int readWrites, final boolean big) throws Exception {
+        try {
+            ExecutorService executorService = MoreExecutors.getExitingExecutorService(new ScheduledThreadPoolExecutor(CONCURRENT_THREADS));
+            for (int i=0; i<readWrites; i++) {
+                final int j = i;
+                executorService.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        String key = "/" + Integer.toString(j) + (big ? "big" : "");
+                        try {
+                            jdbcDataStore.put(key, (big ? bigString : Integer.toHexString(j)));
+                            jdbcDataStore.get(key);
+                        } catch (Exception e) {
+                            System.out.println("EXECUTOR THREAD EXCEPTION: " + e);
+                        }
+                    }
+                });
+            }
+            long now = System.currentTimeMillis();
+            executorService.shutdown();
+            executorService.awaitTermination(30, TimeUnit.SECONDS);
+            long rv = System.currentTimeMillis() - now;
+            for (int i=0; i<readWrites; i++) {
+                assertEquals(jdbcDataStore.get("/" + Integer.toString(i) + (big ? "big" : "")), (big ? bigString : Integer.toHexString(i)));
+            }
+            System.out.println(jdbcDataStore.getDescription() + ": " + rv);
+        } catch (Exception ex) {
+            System.out.println(jdbcDataStore.getDescription() + " FAILED");
+        }
+
+
     }
 
 
