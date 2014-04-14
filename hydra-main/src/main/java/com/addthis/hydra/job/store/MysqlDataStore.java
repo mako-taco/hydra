@@ -8,30 +8,32 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+import com.addthis.basis.util.Parameter;
+
 public class MysqlDataStore extends JdbcDataStore {
     private static final String description = "mysql";
     private static final Properties properties;
+    private final String insertTemplate;
     static {
         properties = new Properties();
-        properties.put("user", "spawn");
-        properties.put("password", "pw");
+        properties.put("user", Parameter.value("mysql.datastore.user", "spawn"));
+        properties.put("password", Parameter.value("mysql.datastore.password", "pw"));
     }
 
     public MysqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
-        super("org.drizzle.jdbc.DrizzleDriver", "jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, properties);
+        super("org.drizzle.jdbc.DrizzleDriver", "jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, properties, tableName);
         if (host == null || dbName == null || tableName == null) {
             throw new IllegalArgumentException("Null dbName/tableName passed to JdbcDataStore");
         }
-        this.tableName = tableName;
         runStartupCommand();
+        insertTemplate = "insert into " + tableName +
+                         "(" + pathKey + "," + valueKey + "," + childKey + ") " +
+                         "values( ? , ? , ? ) on duplicate key update " + valueKey + "=values(" + valueKey + ")";
     }
 
     @Override
     protected void runInsert(String path, String value, String childId) throws SQLException {
         try (Connection connection = getConnection()) {
-            String insertTemplate = "insert into " + tableName +
-                                    "(" + pathKey + "," + valueKey + "," + childKey + ") " +
-                                    "values( ? , ? , ? ) on duplicate key update " + valueKey + "=values(" + valueKey + ")";
             PreparedStatement preparedStatement = connection.prepareStatement(insertTemplate);
             preparedStatement.setString(1, path);
             preparedStatement.setBlob(2, valueToBlob(value));

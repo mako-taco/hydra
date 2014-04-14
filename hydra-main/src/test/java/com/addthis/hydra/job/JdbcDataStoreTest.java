@@ -10,6 +10,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 import com.addthis.basis.util.Files;
 
@@ -42,6 +44,7 @@ public class JdbcDataStoreTest {
     private final static String bigJsonString;
 
     static {
+        Logger.getLogger("org.apache.zookeeper").setLevel(Level.WARNING);
         int bigStringKeys = 8000;
         JSONObject obj = new JSONObject();
         try {
