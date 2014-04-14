@@ -8,7 +8,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
-import java.beans.PropertyVetoException;
 import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -27,29 +26,27 @@ import com.ning.compress.lzf.LZFDecoder;
 import com.ning.compress.lzf.LZFEncoder;
 import com.ning.compress.lzf.LZFException;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 public abstract class JdbcDataStore implements SpawnDataStore {
-    private static Logger log = LoggerFactory.getLogger(JdbcDataStore.class);
     private static final CodecJSON codecJSON = new CodecJSON();
     protected static final String pathKey = "path";
     protected static final String valueKey = "val";
     protected static final String childKey = "child";
-    protected String tableName;
+    protected final String tableName;
     protected static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
     protected static final int minPoolSize = Parameter.intValue("jdbc.datastore.minpoolsize", 10);
     protected static final int maxPoolSize = Parameter.intValue("jdbc.datastore.maxpoolsize", 20);
     protected static final String blankChildId = "_";
     private final ComboPooledDataSource cpds;
 
-    public JdbcDataStore(String driverClass, String jdbcUrl, Properties properties) throws PropertyVetoException {
+    public JdbcDataStore(String driverClass, String jdbcUrl, Properties properties, String tableName) throws Exception {
         cpds = new ComboPooledDataSource();
         cpds.setDriverClass(driverClass);
         cpds.setJdbcUrl(jdbcUrl);
+        cpds.setInitialPoolSize(minPoolSize);
         cpds.setMinPoolSize(minPoolSize);
         cpds.setMaxPoolSize(maxPoolSize);
         cpds.setProperties(properties);
+        this.tableName = tableName;
     }
 
     protected Connection getConnection() throws SQLException {

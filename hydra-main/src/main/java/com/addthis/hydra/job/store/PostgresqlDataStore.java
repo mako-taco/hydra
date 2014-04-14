@@ -12,8 +12,7 @@ public class PostgresqlDataStore extends JdbcDataStore {
     private final String insertTemplate;
 
     public PostgresqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
-        super("org.postgresql.Driver", "jdbc:postgresql://" + host + ":" + port + "/" + dbName, new Properties());
-        this.tableName = tableName;
+        super("org.postgresql.Driver", "jdbc:postgresql://" + host + ":" + port + "/" + dbName, new Properties(), tableName);
         insertTemplate = "WITH new_values (" + pathKey + ", " + valueKey + ", " + childKey + ") as (values (?, ?, ?)),\n" +
                          "upsert as( \n" +
                          "    update " + tableName + " m \n" +
