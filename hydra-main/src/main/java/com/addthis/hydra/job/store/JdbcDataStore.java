@@ -94,9 +94,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
                 }
             } while(resultSet.next());
             return rv;
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        } catch (LZFException e) {
+        } catch (SQLException | LZFException e) {
             throw new RuntimeException(e);
         }
     }
@@ -247,9 +245,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
                 }
             } while (resultSet.next());
             return rv;
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
-        } catch (LZFException e) {
+        } catch (SQLException | LZFException e) {
             throw new RuntimeException(e);
         }
 

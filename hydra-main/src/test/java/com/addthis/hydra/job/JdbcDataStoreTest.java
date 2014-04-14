@@ -62,13 +62,13 @@ public class JdbcDataStoreTest {
     @Test
     public void runCorrectnessTest() throws Exception {
         SpawnDataStore jdbcDataStore;
-        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable28");
+        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable29");
         correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
-        jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
+        jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test2");
         correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
-        jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable");
+        jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable2");
         correctnessTestDataStore(jdbcDataStore);
         jdbcDataStore.close();
     }
@@ -118,7 +118,7 @@ public class JdbcDataStoreTest {
             jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();
-            jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable");
+            jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable9");
             performanceTestDataStore(jdbcDataStore);
             jdbcDataStore.close();
         }
