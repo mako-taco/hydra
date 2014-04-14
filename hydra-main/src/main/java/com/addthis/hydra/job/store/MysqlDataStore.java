@@ -4,37 +4,26 @@ import java.util.Properties;
 
 import java.sql.Blob;
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class MysqlDataStore extends JdbcDataStore {
     private static final String description = "mysql";
-    private final String host;
-    private final int port;
-    private final String dbName;
-    private final Properties props;
-
+    private static final Properties properties;
+    static {
+        properties = new Properties();
+        properties.put("user", "spawn");
+        properties.put("password", "pw");
+    }
 
     public MysqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
+        super("org.drizzle.jdbc.DrizzleDriver", "jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, properties);
         if (host == null || dbName == null || tableName == null) {
             throw new IllegalArgumentException("Null dbName/tableName passed to JdbcDataStore");
         }
         this.tableName = tableName;
-        Class.forName("org.drizzle.jdbc.DrizzleDriver");
-        this.host = host;
-        this.port = port;
-        this.dbName = dbName;
-        props = new Properties();
-        props.put("user", "spawn");
-        props.put("password", "pw");
         runStartupCommand();
-    }
-
-    @Override
-    protected Connection getConnection() throws SQLException {
-        return DriverManager.getConnection("jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, props);
     }
 
     @Override

@@ -1,29 +1,21 @@
 package com.addthis.hydra.job.store;
 
+import java.util.Properties;
+
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 public class H2DataStore extends JdbcDataStore {
     private static final String description = "h2";
-    private final String dbPath;
 
     public H2DataStore(String dbPath, String tableName) throws Exception {
+        super("org.h2.Driver",  "jdbc:h2:" + dbPath, new Properties());
         if (dbPath == null || tableName == null) {
             throw new IllegalArgumentException("Null dbName/tableName passed to JdbcDataStore");
         }
-        this.dbPath = dbPath;
         this.tableName = tableName;
-        Class.forName("org.h2.Driver");
         runStartupCommand();
-    }
-
-    @Override
-    protected Connection getConnection() throws SQLException {
-        Connection connection = DriverManager.getConnection("jdbc:h2:" + dbPath);
-        connection.setAutoCommit(false);
-        return connection;
     }
 
     @Override
