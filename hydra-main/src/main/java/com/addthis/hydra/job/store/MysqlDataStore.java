@@ -1,5 +1,7 @@
 package com.addthis.hydra.job.store;
 
+import java.util.Properties;
+
 import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -10,8 +12,8 @@ public class MysqlDataStore extends JdbcDataStore {
     private static final String description = "mysql";
     private final String insertTemplate;
 
-    public MysqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
-        super("org.drizzle.jdbc.DrizzleDriver", "jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, tableName);
+    public MysqlDataStore(String host, int port, String dbName, String tableName, Properties properties) throws Exception {
+        super("org.drizzle.jdbc.DrizzleDriver", "jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, tableName, properties);
         if (host == null || dbName == null || tableName == null) {
             throw new IllegalArgumentException("Null dbName/tableName passed to JdbcDataStore");
         }

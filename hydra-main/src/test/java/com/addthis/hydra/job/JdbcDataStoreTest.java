@@ -7,6 +7,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +47,7 @@ public class JdbcDataStoreTest {
     private final static String bigJsonString;
     private final static int postgresPort = 5432;
     private final static int mysqlPort = 3306;
+    private final static Properties testProperties = new Properties();
 
     static {
         Logger.getLogger("org.apache.zookeeper").setLevel(Level.WARNING);
@@ -78,13 +80,13 @@ public class JdbcDataStoreTest {
     public void runCorrectnessTest() throws Exception {
         String tableName = "testtable1";
         SpawnDataStore spawnDataStore;
-        spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName);
+        spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName, testProperties);
         correctnessTestDataStore(spawnDataStore);
         spawnDataStore.close();
-        spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName);
+        spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName, testProperties);
         correctnessTestDataStore(spawnDataStore);
         spawnDataStore.close();
-        spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName);
+        spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName, testProperties);
         correctnessTestDataStore(spawnDataStore);
         spawnDataStore.close();
     }
@@ -113,8 +115,10 @@ public class JdbcDataStoreTest {
         spawnDataStore.putAsChild("parent", "child2", "val2");
         spawnDataStore.deleteChild("parent", "child2");
         spawnDataStore.putAsChild("parent", "child3", val2);
+        spawnDataStore.put("parent", "parentvalue");
         List<String> expectedChildren = ImmutableList.of("child1", "child3");
         assertEquals("should get expected children list", expectedChildren, spawnDataStore.getChildrenNames("parent"));
+        assertEquals("should get correct parent value", "parentvalue", spawnDataStore.get("parent"));
         Map<String, String> expectedChildrenMap = ImmutableMap.of("child1", val1, "child3", val2);
         assertEquals("should get expected children map", expectedChildrenMap, spawnDataStore.getAllChildren("parent"));
         assertEquals("should get empty list for non-existent parent", new ArrayList<String>(), spawnDataStore.getChildrenNames("PARENT_NO_EXIST"));
@@ -135,13 +139,13 @@ public class JdbcDataStoreTest {
             spawnDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
             performanceTestDataStore(spawnDataStore);
             spawnDataStore.close();
-            spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName);
+            spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName, testProperties);
             performanceTestDataStore(spawnDataStore);
             spawnDataStore.close();
-            spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName);
+            spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName, testProperties);
             performanceTestDataStore(spawnDataStore);
             spawnDataStore.close();
-            spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName);
+            spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName, testProperties);
             performanceTestDataStore(spawnDataStore);
             spawnDataStore.close();
         }
@@ -212,13 +216,13 @@ public class JdbcDataStoreTest {
                 spawnDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
                 concurrentTest(spawnDataStore, readWrites, big);
                 spawnDataStore.close();
-                spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName);
+                spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName, testProperties);
                 concurrentTest(spawnDataStore, readWrites, big);
                 spawnDataStore.close();
-                spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName);
+                spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName, testProperties);
                 concurrentTest(spawnDataStore, readWrites, big);
                 spawnDataStore.close();
-                spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName);
+                spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName, testProperties);
                 concurrentTest(spawnDataStore, readWrites, big);
                 spawnDataStore.close();
             }
