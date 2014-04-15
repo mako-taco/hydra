@@ -35,10 +35,17 @@ public abstract class JdbcDataStore implements SpawnDataStore {
     protected static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
     protected static final int minPoolSize = Parameter.intValue("jdbc.datastore.minpoolsize", 10);
     protected static final int maxPoolSize = Parameter.intValue("jdbc.datastore.maxpoolsize", 20);
+    private static final String user = Parameter.value("sql.datastore.user");
+
     protected static final String blankChildId = "_";
     private final ComboPooledDataSource cpds;
 
-    public JdbcDataStore(String driverClass, String jdbcUrl, Properties properties, String tableName) throws Exception {
+    public JdbcDataStore(String driverClass, String jdbcUrl, String tableName) throws Exception {
+        Properties properties = new Properties();
+        if (user != null) {
+            properties.put("user", user);
+            properties.put("password", Parameter.value("sql.datastore.password", ""));
+        }
         cpds = new ComboPooledDataSource();
         cpds.setDriverClass(driverClass);
         cpds.setJdbcUrl(jdbcUrl);
