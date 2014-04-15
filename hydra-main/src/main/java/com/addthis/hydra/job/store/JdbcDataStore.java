@@ -31,21 +31,16 @@ public abstract class JdbcDataStore implements SpawnDataStore {
     protected static final String pathKey = "path";
     protected static final String valueKey = "val";
     protected static final String childKey = "child";
-    protected final String tableName;
-    protected static final int maxPathLength = Parameter.intValue("jdbc.datastore.max.path.length", 200);
-    protected static final int minPoolSize = Parameter.intValue("jdbc.datastore.minpoolsize", 10);
-    protected static final int maxPoolSize = Parameter.intValue("jdbc.datastore.maxpoolsize", 20);
-    private static final String user = Parameter.value("sql.datastore.user");
+    protected static final String blankChildId = "_root";
 
-    protected static final String blankChildId = "_";
+    protected static final int maxPathLength = Parameter.intValue("sql.datastore.max.path.length", 200);
+    private static final int minPoolSize = Parameter.intValue("sql.datastore.minpoolsize", 10);
+    private static final int maxPoolSize = Parameter.intValue("sql.datastore.maxpoolsize", 20);
+    protected final String tableName;
+
     private final ComboPooledDataSource cpds;
 
-    public JdbcDataStore(String driverClass, String jdbcUrl, String tableName) throws Exception {
-        Properties properties = new Properties();
-        if (user != null) {
-            properties.put("user", user);
-            properties.put("password", Parameter.value("sql.datastore.password", ""));
-        }
+    public JdbcDataStore(String driverClass, String jdbcUrl, String tableName, Properties properties) throws Exception {
         cpds = new ComboPooledDataSource();
         cpds.setDriverClass(driverClass);
         cpds.setJdbcUrl(jdbcUrl);
@@ -79,8 +74,9 @@ public abstract class JdbcDataStore implements SpawnDataStore {
     @Override
     public String get(String path) {
         try (Connection connection = getConnection()){
-            PreparedStatement preparedStatement = connection.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey + "=?");
+            PreparedStatement preparedStatement = connection.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey + "=? and " + childKey + "=?");
             preparedStatement.setString(1, path);
+            preparedStatement.setString(2, blankChildId);
             return getSingleResult(executeQuery(preparedStatement));
         } catch (SQLException e) {
             throw new RuntimeException(e);
@@ -100,12 +96,14 @@ public abstract class JdbcDataStore implements SpawnDataStore {
             sb.append((started ? " or " : " where ") + pathKey + "=?");
             started = true;
         }
+        sb.append(" and " + childKey + "=?");
         try (Connection connection = getConnection()) {
             PreparedStatement preparedStatement = connection.prepareStatement(sb.toString());
             int j=1;
             for (String path : paths) {
                 preparedStatement.setString(j++, path);
             }
+            preparedStatement.setString(j, blankChildId);
             ResultSet resultSet = executeQuery(preparedStatement);
             resultSet.next();
             do {
@@ -124,6 +122,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
         if (path.length() > maxPathLength || (childId != null && childId.length() > maxPathLength)) {
             throw new IllegalArgumentException("Input path longer than max of " + maxPathLength);
         }
+
         runInsert(path, value, childId);
     }
 
@@ -134,6 +133,9 @@ public abstract class JdbcDataStore implements SpawnDataStore {
 
     @Override
     public void putAsChild(String parent, String childId, String value) throws Exception {
+        if (blankChildId.equals(childId)) {
+            throw new IllegalArgumentException("Child id " + blankChildId + " is reserved for internal usage");
+        }
         insert(parent, value, childId);
     }
 
@@ -189,7 +191,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
     @Override
     public String getChild(String parent, String childId) throws Exception {
         try (Connection connection = getConnection()) {
-            PreparedStatement preparedStatement = connection.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey + "=? and " + childKey + "=?");
+            PreparedStatement preparedStatement = connection.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey + "=? and " + childKey + "!=?");
             preparedStatement.setString(1, parent);
             preparedStatement.setString(2, childId);
             return getSingleResult(executeQuery(preparedStatement));
@@ -225,10 +227,6 @@ public abstract class JdbcDataStore implements SpawnDataStore {
         }
     }
 
-    protected String makeChildQueryTemplate(boolean includeChildValues) {
-        return "select " + childKey + (includeChildValues ? "," + valueKey : "") + " from " + tableName + " where " + pathKey + "=?";
-    }
-
     protected ResultSet getResultsForQuery(Connection connection, String template, String path) throws SQLException {
         PreparedStatement preparedStatement = connection.prepareStatement(template);
         preparedStatement.setString(1, path);
@@ -243,9 +241,12 @@ public abstract class JdbcDataStore implements SpawnDataStore {
 
     @Override
     public List<String> getChildrenNames(String path) {
-        String template = makeChildQueryTemplate(false);
         try (Connection connection = getConnection()){
-            ResultSet resultSet = getResultsForQuery(connection, template, path);
+            String template =  "select " + childKey + " from " + tableName + " where " + pathKey + "=? and " + childKey + "!=?";
+            PreparedStatement preparedStatement = connection.prepareStatement(template);
+            preparedStatement.setString(1, path);
+            preparedStatement.setString(2, blankChildId);
+            ResultSet resultSet = executeQuery(preparedStatement);
             ArrayList<String> rv = new ArrayList<>();
             if (resultSet == null) {
                 return rv;
@@ -261,7 +262,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
 
     @Override
     public Map<String, String> getAllChildren(String path) {
-        String template = makeChildQueryTemplate(true);
+        String template = "select " + childKey + "," + valueKey + " from " + tableName + " where " + pathKey + "=? and " + childKey + "!=?";
         try (Connection connection = getConnection()) {
             HashMap<String, String> rv = new HashMap<>();
             ResultSet resultSet = getResultsForQuery(connection, template, path);

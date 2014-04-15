@@ -1,5 +1,7 @@
 package com.addthis.hydra.job.store;
 
+import java.util.Properties;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -9,8 +11,8 @@ public class H2DataStore extends JdbcDataStore {
     private static final String description = "h2";
     private final String insertTemplate;
 
-    public H2DataStore(String dbPath, String tableName) throws Exception {
-        super("org.h2.Driver",  "jdbc:h2:" + dbPath, tableName);
+    public H2DataStore(String dbPath, String tableName, Properties properties) throws Exception {
+        super("org.h2.Driver",  "jdbc:h2:" + dbPath, tableName, properties);
         if (dbPath == null || tableName == null) {
             throw new IllegalArgumentException("Null dbName/tableName passed to JdbcDataStore");
         }
