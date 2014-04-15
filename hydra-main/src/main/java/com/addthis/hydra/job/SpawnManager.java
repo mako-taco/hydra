@@ -1035,8 +1035,12 @@ public class SpawnManager {
                     KVPairs kv = link.getRequestValues();
                     DataStoreUtil.DataStoreType srcType = DataStoreUtil.DataStoreType.valueOf(kv.getValue("src"));
                     DataStoreUtil.DataStoreType tarType = DataStoreUtil.DataStoreType.valueOf(kv.getValue("tar"));
-                    if (srcType == null || tarType == null) {
-                        DataStoreUtil.cutoverBetweenDataStore(DataStoreUtil.makeSpawnDataStore(srcType), DataStoreUtil.makeSpawnDataStore(tarType));
+                    boolean checkAllWrites = kv.getIntValue("checkAll", 1) == 1;
+                    if (srcType != null || tarType != null) {
+                        DataStoreUtil.cutoverBetweenDataStore(DataStoreUtil.makeSpawnDataStore(srcType), DataStoreUtil.makeSpawnDataStore(tarType), checkAllWrites);
+                        link.sendJSON(200, "OK", json("success", "transfer complete"));
+                    } else {
+                        link.sendJSON(500, "Error", json("error", "Please specify a source and target datastore"));
                     }
                 } catch (Exception e) {
                     link.sendShortReply(500, "Server Error", new JSONObject().put("error", e.getMessage()).toString());

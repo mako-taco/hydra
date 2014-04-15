@@ -15,6 +15,7 @@ package com.addthis.hydra.job.store;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 
 import com.addthis.basis.util.Parameter;
 
@@ -44,11 +45,13 @@ public class DataStoreUtil {
 
     private static final Logger log = LoggerFactory.getLogger(DataStoreUtil.class);
 
-    private static final String canonicalDataStoreType = Parameter.value("spawn.jdbc.store.type", "MYSQL");
-    private static final String h2DbPath = Parameter.value("spawn.jdbc.db.path", "etc/spawndatastore");
-    private static final String tableName = Parameter.value("spawn.table.name", "spawndatastoretable");
-    private static final String sqlDbName = Parameter.value("spawn.sql.db.name", "spawndatastore");
+    private static final String canonicalDataStoreType = Parameter.value("spawn.datastore.type", "ZK");
+    private static final String h2DbPath = Parameter.value("spawn.sql.h2path", "etc/spawndatastore");
+    private static final String sqlTableName = Parameter.value("spawn.sql.table", "spawndatastoretable");
+    private static final String sqlDbName = Parameter.value("spawn.sql.db", "spawndatastore");
     private static final String sqlHostName = Parameter.value("spawn.sql.host", "localhost");
+    private static final String sqlUser = Parameter.value("spawn.sql.user"); // Intentionally defaults to null
+    private static final String sqlPassword = Parameter.value("spawn.sql.password", "");
     private static final int sqlPort = Parameter.intValue("spawn.sql.port", 3306);
 
     public static enum DataStoreType {ZK, MYSQL, H2, POSTGRES}
@@ -63,11 +66,16 @@ public class DataStoreUtil {
     }
 
     public static SpawnDataStore makeSpawnDataStore(DataStoreType type) throws Exception {
+        Properties properties = new Properties();
+        if (sqlUser != null) {
+            properties.put("user", sqlUser);
+            properties.put("password", sqlPassword);
+        }
         switch (type) {
             case ZK: return new ZookeeperDataStore(null);
-            case MYSQL: return new MysqlDataStore(sqlHostName, sqlPort, sqlDbName, tableName);
-            case H2: return new H2DataStore(h2DbPath, tableName);
-            case POSTGRES: return new PostgresqlDataStore(sqlHostName, sqlPort, sqlDbName, tableName);
+            case MYSQL: return new MysqlDataStore(sqlHostName, sqlPort, sqlDbName, sqlTableName, properties);
+            case H2: return new H2DataStore(h2DbPath, sqlTableName, properties);
+            case POSTGRES: return new PostgresqlDataStore(sqlHostName, sqlPort, sqlDbName, sqlTableName, properties);
             default: throw new IllegalArgumentException("Unexpected DataStoreType " + type);
         }
     }
@@ -79,13 +87,13 @@ public class DataStoreUtil {
      * @param targetDataStore The new datastore to push data to
      * @throws Exception If any part of the cutover fails
      */
-    public static void cutoverBetweenDataStore(SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore) throws Exception {
+    public static void cutoverBetweenDataStore(SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore, boolean checkAllWrites) throws Exception {
         log.warn("Beginning cutover from " + sourceDataStore.getDescription() + " to " + targetDataStore.getDescription());
         for (String value : pathsToImport) {
-            importValue(value, sourceDataStore, targetDataStore);
+            importValue(value, sourceDataStore, targetDataStore, checkAllWrites);
         }
         for (String parent : parentsToImport) {
-            importParentAndChildren(parent, sourceDataStore, targetDataStore);
+            importParentAndChildren(parent, sourceDataStore, targetDataStore, checkAllWrites);
         }
         List<String> jobIds = sourceDataStore.getChildrenNames(SPAWN_JOB_CONFIG_PATH);
         if (jobIds != null) {
@@ -95,9 +103,9 @@ public class DataStoreUtil {
                 }
                 log.warn("Cutting over job data for " + jobId);
                 String basePath = SPAWN_JOB_CONFIG_PATH + "/" + jobId;
-                importValue(basePath, sourceDataStore, targetDataStore);
+                importValue(basePath, sourceDataStore, targetDataStore, checkAllWrites);
                 for (String parameter : jobParametersToImport) {
-                    importValue(basePath + "/" + parameter, sourceDataStore, targetDataStore);
+                    importValue(basePath + "/" + parameter, sourceDataStore, targetDataStore, checkAllWrites);
                 }
             }
         }
@@ -112,11 +120,17 @@ public class DataStoreUtil {
      * @param targetDataStore The target to write to
      * @throws Exception If there is a problem during the transfer
      */
-    private static void importValue(String path, SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore) throws Exception {
+    private static void importValue(String path, SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore, boolean checkAllWrites) throws Exception {
         log.warn("Cutting over value of path " + path);
         String sourceValue = sourceDataStore.get(path);
         if (sourceValue != null) {
             targetDataStore.put(path, sourceValue);
+            if (checkAllWrites) {
+                String checkedValue = targetDataStore.get(path);
+                if (!sourceValue.equals(checkedValue)) {
+                    throw new RuntimeException("INCORRECT TARGET VALUE DETECTED FOR PATH " + path);
+                }
+            }
         }
     }
 
@@ -128,9 +142,9 @@ public class DataStoreUtil {
      * @param targetDataStore The target to write to
      * @throws Exception If there is a problem during the transfer
      */
-    private static void importParentAndChildren(String parent, SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore) throws Exception {
+    private static void importParentAndChildren(String parent, SpawnDataStore sourceDataStore, SpawnDataStore targetDataStore, boolean checkAllWrites) throws Exception {
         log.warn("Cutting over children of path " + parent);
-        importValue(parent, sourceDataStore, targetDataStore);
+        importValue(parent, sourceDataStore, targetDataStore, checkAllWrites);
         List<String> children = sourceDataStore.getChildrenNames(parent);
         if (children != null) {
             for (String child : children) {
