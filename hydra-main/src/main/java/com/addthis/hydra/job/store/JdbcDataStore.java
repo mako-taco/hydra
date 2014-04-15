@@ -63,6 +63,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
                                          + childKey + " VARCHAR(" + maxPathLength + "), "
                                          + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
             ).execute();
+            connection.commit();
         }
     }
 

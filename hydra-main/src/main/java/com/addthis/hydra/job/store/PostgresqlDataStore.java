@@ -38,7 +38,8 @@ public class PostgresqlDataStore extends JdbcDataStore {
                                         + valueKey + " TEXT, "
                                         + childKey + " VARCHAR(" + maxPathLength + "), "
                                         + "PRIMARY KEY (" + pathKey + ", " + childKey + "))"
-            );
+            ).execute();
+            connection.commit();
         }
     }
 
