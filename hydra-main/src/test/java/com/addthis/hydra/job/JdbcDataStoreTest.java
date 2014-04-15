@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -32,6 +33,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import static junit.framework.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
@@ -42,6 +44,8 @@ public class JdbcDataStoreTest {
      * A big string to use as a test value. Constructed as a JSON map in order to simulate the things Spawn typically stores.
      */
     private final static String bigJsonString;
+    private final static int postgresPort = 5432;
+    private final static int mysqlPort = 3306;
 
     static {
         Logger.getLogger("org.apache.zookeeper").setLevel(Level.WARNING);
@@ -68,72 +72,83 @@ public class JdbcDataStoreTest {
     }
 
     @Test
+    /**
+     * Do basic put/get tests. Zookeeper is not tested here as it has additional constraints (e.g. keys begin with /)
+     */
     public void runCorrectnessTest() throws Exception {
-        SpawnDataStore jdbcDataStore;
-        jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable29");
-        correctnessTestDataStore(jdbcDataStore);
-        jdbcDataStore.close();
-        jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test2");
-        correctnessTestDataStore(jdbcDataStore);
-        jdbcDataStore.close();
-        jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable2");
-        correctnessTestDataStore(jdbcDataStore);
-        jdbcDataStore.close();
+        String tableName = "testtable1";
+        SpawnDataStore spawnDataStore;
+        spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName);
+        correctnessTestDataStore(spawnDataStore);
+        spawnDataStore.close();
+        spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName);
+        correctnessTestDataStore(spawnDataStore);
+        spawnDataStore.close();
+        spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName);
+        correctnessTestDataStore(spawnDataStore);
+        spawnDataStore.close();
     }
 
-    public void correctnessTestDataStore(SpawnDataStore jdbcDataStore) throws Exception {
+    private void correctnessTestDataStore(SpawnDataStore spawnDataStore) throws Exception {
         String key1 = "key1";
         String val1 = "value1";
         String key2 = "key2";
         String val2 = "value!!\"{ !!'' }[,'],;';;'\n_\\";
 
-        jdbcDataStore.put(key1, "old");
-        jdbcDataStore.put(key1, val1);
-        jdbcDataStore.put(key2, val2);
-        assertNull("should get null for non-inserted key", jdbcDataStore.get("key5"));
-        assertEquals("should get latest value", val1, jdbcDataStore.get(key1));
-        assertEquals("should correctly fetch value with extra characters", val2, jdbcDataStore.get(key2));
+        spawnDataStore.put(key1, "old");
+        spawnDataStore.put(key1, val1);
+        spawnDataStore.put(key2, val2);
+        assertNull("should get null for non-inserted key", spawnDataStore.get("key5"));
+        assertEquals("should get latest value", val1, spawnDataStore.get(key1));
+        assertEquals("should correctly fetch value with extra characters", val2, spawnDataStore.get(key2));
         Map<String, String> expected = ImmutableMap.of(key1, val1, key2, val2);
 
         String nullKey = "nullkey";
-        jdbcDataStore.put(nullKey, "val");
-        jdbcDataStore.put(nullKey, null);
-        assertNull("should get null for key inserted as null", jdbcDataStore.get(nullKey));
+        spawnDataStore.put(nullKey, "val");
+        spawnDataStore.put(nullKey, null);
+        assertNull("should get null for key inserted as null", spawnDataStore.get(nullKey));
 
-        assertEquals("should get expected map from multi-fetch call", expected, jdbcDataStore.get(new String[]{key1, key2, "otherKey", "other'Key\nwithWeird;;';Characters"}));
-        jdbcDataStore.putAsChild("parent", "child1", val1);
-        jdbcDataStore.putAsChild("parent", "child2", "val2");
-        jdbcDataStore.deleteChild("parent", "child2");
-        jdbcDataStore.putAsChild("parent", "child3", val2);
+        assertEquals("should get expected map from multi-fetch call", expected, spawnDataStore.get(new String[]{key1, key2, "otherKey", "other'Key\nwithWeird;;';Characters"}));
+        spawnDataStore.putAsChild("parent", "child1", val1);
+        spawnDataStore.putAsChild("parent", "child2", "val2");
+        spawnDataStore.deleteChild("parent", "child2");
+        spawnDataStore.putAsChild("parent", "child3", val2);
         List<String> expectedChildren = ImmutableList.of("child1", "child3");
-        assertEquals("should get expected children list", expectedChildren, jdbcDataStore.getChildrenNames("parent"));
+        assertEquals("should get expected children list", expectedChildren, spawnDataStore.getChildrenNames("parent"));
         Map<String, String> expectedChildrenMap = ImmutableMap.of("child1", val1, "child3", val2);
-        assertEquals("should get expected children map", expectedChildrenMap, jdbcDataStore.getAllChildren("parent"));
-        assertEquals("should get empty list for non-existent parent", new ArrayList<String>(), jdbcDataStore.getChildrenNames("PARENT_NO_EXIST"));
-        assertEquals("should get empty map for non-existent parent", new HashMap<String, String>(), jdbcDataStore.getAllChildren("PARENT_NO_EXIST"));
+        assertEquals("should get expected children map", expectedChildrenMap, spawnDataStore.getAllChildren("parent"));
+        assertEquals("should get empty list for non-existent parent", new ArrayList<String>(), spawnDataStore.getChildrenNames("PARENT_NO_EXIST"));
+        assertEquals("should get empty map for non-existent parent", new HashMap<String, String>(), spawnDataStore.getAllChildren("PARENT_NO_EXIST"));
     }
 
     @Test
+    /**
+     * Test single-threaded read/write performance for each type of data store.
+     * All values reported are in milliseconds, in the following order:
+     * [small reads; small writes; small reads and writes; large reads; large writes; large reads and writes]
+     * Startup and shutdown time is not included in the test.
+     */
     public void perfTest() throws Exception {
+        String tableName = "testtable2";
         for (int i = 0; i < 5; i++) {
-            SpawnDataStore jdbcDataStore;
-            jdbcDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
-            performanceTestDataStore(jdbcDataStore);
-            jdbcDataStore.close();
-            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "testtable10");
-            performanceTestDataStore(jdbcDataStore);
-            jdbcDataStore.close();
-            jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "test");
-            performanceTestDataStore(jdbcDataStore);
-            jdbcDataStore.close();
-            jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "testtable9");
-            performanceTestDataStore(jdbcDataStore);
-            jdbcDataStore.close();
+            SpawnDataStore spawnDataStore;
+            spawnDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
+            performanceTestDataStore(spawnDataStore);
+            spawnDataStore.close();
+            spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName);
+            performanceTestDataStore(spawnDataStore);
+            spawnDataStore.close();
+            spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName);
+            performanceTestDataStore(spawnDataStore);
+            spawnDataStore.close();
+            spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName);
+            performanceTestDataStore(spawnDataStore);
+            spawnDataStore.close();
         }
 
     }
 
-    public void performanceTestDataStore(SpawnDataStore spawnDataStore) throws Exception {
+    private void performanceTestDataStore(SpawnDataStore spawnDataStore) throws Exception {
         long readSmallSum = 0;
         long writeSmallSum = 0;
         long readWriteSmallSum = 0;
@@ -153,89 +168,110 @@ public class JdbcDataStoreTest {
         System.out.println(spawnDataStore.getDescription() + Arrays.asList(readSmallSum, writeSmallSum, readWriteSmallSum, readBigSum, writeBigSum, readWriteBigSum));
     }
 
-    private long readTest(SpawnDataStore jdbcDataStore, int reads, boolean big) {
+    private long readTest(SpawnDataStore spawnDataStore, int reads, boolean big) {
         long now = System.currentTimeMillis();
         for (int i = 0; i < reads; i++) {
-            jdbcDataStore.get("/" + Integer.toString(i) + (big ? "big" : ""));
+            spawnDataStore.get("/" + Integer.toString(i) + (big ? "big" : ""));
         }
         return (System.currentTimeMillis() - now);
     }
 
-    private long writeTest(SpawnDataStore jdbcDataStore, int writes, boolean big) throws Exception {
+    private long writeTest(SpawnDataStore spawnDataStore, int writes, boolean big) throws Exception {
         long now = System.currentTimeMillis();
         for (int i = 0; i < writes; i++) {
-            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigJsonString : Integer.toHexString(i)));
+            spawnDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigJsonString : Integer.toHexString(i)));
         }
         return (System.currentTimeMillis() - now);
 
     }
 
-    private long readWriteTest(SpawnDataStore jdbcDataStore, int readWrites, boolean big) throws Exception {
+    private long readWriteTest(SpawnDataStore spawnDataStore, int readWrites, boolean big) throws Exception {
         long now = System.currentTimeMillis();
 
         for (int i = 0; i < readWrites; i++) {
-            jdbcDataStore.get("/" + Integer.toString(i));
-            jdbcDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigJsonString : Integer.toHexString(i)));
+            spawnDataStore.get("/" + Integer.toString(i));
+            spawnDataStore.put("/" + Integer.toString(i) + (big ? "big" : ""), (big ? bigJsonString : Integer.toHexString(i)));
         }
         return (System.currentTimeMillis() - now);
 
     }
 
     private static final int CONCURRENT_THREADS = 20;
+    private static AtomicBoolean concurrentTestErrored;
 
     @Test
+    /**
+     * Test multithreaded correctness and performance. Do many writes in parallel, then verify that all writes happened successfully.
+     */
     public void concurCorrectnessTest() throws Exception {
-        for (int i = 0; i < 5; i++) {
-            int readWrites = 80;
-            SpawnDataStore jdbcDataStore;
-            jdbcDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
-            concurrentTest(jdbcDataStore, readWrites, false);
-            jdbcDataStore.close();
-            jdbcDataStore = new PostgresqlDataStore("localhost", 5432, "template1", "CCtesttable2");
-            concurrentTest(jdbcDataStore, readWrites, false);
-            jdbcDataStore.close();
-            jdbcDataStore = new H2DataStore(tempDir.getAbsolutePath(), "CCtest3");
-            concurrentTest(jdbcDataStore, readWrites, false);
-            jdbcDataStore.close();
-            jdbcDataStore = new MysqlDataStore("localhost", 3306, "test", "CCtesttable2");
-            concurrentTest(jdbcDataStore, readWrites, false);
-            jdbcDataStore.close();
+        String tableName = "testtable3";
+        for (boolean big : Arrays.asList(false, true)) {
+            for (int i = 0; i < 5; i++) {
+                int readWrites = 80;
+                SpawnDataStore spawnDataStore;
+                spawnDataStore = new ZookeeperDataStore(ZkUtil.makeStandardClient());
+                concurrentTest(spawnDataStore, readWrites, big);
+                spawnDataStore.close();
+                spawnDataStore = new PostgresqlDataStore("localhost", postgresPort, "template1", tableName);
+                concurrentTest(spawnDataStore, readWrites, big);
+                spawnDataStore.close();
+                spawnDataStore = new H2DataStore(tempDir.getAbsolutePath(), tableName);
+                concurrentTest(spawnDataStore, readWrites, big);
+                spawnDataStore.close();
+                spawnDataStore = new MysqlDataStore("localhost", mysqlPort, "test", tableName);
+                concurrentTest(spawnDataStore, readWrites, big);
+                spawnDataStore.close();
+            }
         }
     }
 
-
-
-    private void concurrentTest(final SpawnDataStore jdbcDataStore, int readWrites, final boolean big) throws Exception {
-        try {
-            ExecutorService executorService = MoreExecutors.getExitingExecutorService(new ScheduledThreadPoolExecutor(CONCURRENT_THREADS));
-            for (int i=0; i<readWrites; i++) {
-                final int j = i;
-                executorService.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        String key = "/" + Integer.toString(j) + (big ? "big" : "");
-                        try {
-                            jdbcDataStore.put(key, (big ? bigJsonString : Integer.toHexString(j)));
-                            jdbcDataStore.get(key);
-                        } catch (Exception e) {
-                            System.out.println("EXECUTOR THREAD EXCEPTION: " + e);
-                        }
-                    }
-                });
-            }
-            long now = System.currentTimeMillis();
-            executorService.shutdown();
-            executorService.awaitTermination(30, TimeUnit.SECONDS);
-            long rv = System.currentTimeMillis() - now;
-            for (int i=0; i<readWrites; i++) {
-                assertEquals( (big ? bigJsonString : Integer.toHexString(i)), jdbcDataStore.get("/" + Integer.toString(i) + (big ? "big" : "")));
-            }
-            System.out.println(jdbcDataStore.getDescription() + ": " + rv);
-        } catch (Exception ex) {
-            System.out.println(jdbcDataStore.getDescription() + " FAILED");
+    private void concurrentTest(final SpawnDataStore spawnDataStore, int readWrites, final boolean big) throws Exception {
+        concurrentTestErrored = new AtomicBoolean(false);
+        ExecutorService executorService = MoreExecutors.getExitingExecutorService(new ScheduledThreadPoolExecutor(CONCURRENT_THREADS));
+        for (int i=0; i<readWrites; i++) {
+            executorService.submit(new ConcurrentTestWorker(spawnDataStore, i, big));
+            executorService.submit(new ConcurrentTestWorker(spawnDataStore, readWrites - i, big));
         }
+        long now = System.currentTimeMillis();
+        executorService.shutdown();
+        executorService.awaitTermination(30, TimeUnit.SECONDS);
+        long rv = System.currentTimeMillis() - now;
+        for (int i=0; i<readWrites; i++) {
+            assertEquals( valueForConcurrentTest(i, big), spawnDataStore.get(keyForConcurrentTest(i, big)));
+        }
+        assertFalse("threads should not throw exceptions during concurrent test, type=" + spawnDataStore.getDescription(), concurrentTestErrored.get());
+        System.out.println(spawnDataStore.getDescription() + ", " + (big ? "big" : "small") + " test: " + rv);
+    }
 
+    private class ConcurrentTestWorker implements Runnable {
+        private final String key;
+        private final String value;
+        private final SpawnDataStore spawnDataStore;
 
+        public ConcurrentTestWorker(SpawnDataStore spawnDataStore, int i, boolean big) {
+            this.key = keyForConcurrentTest(i, big);
+            this.value = valueForConcurrentTest(i, big);
+            this.spawnDataStore = spawnDataStore;
+        }
+        @Override
+        public void run() {
+            try {
+                spawnDataStore.put(key, value);
+                spawnDataStore.get(key);
+            } catch (Exception e) {
+                System.out.println("EXECUTOR THREAD EXCEPTION: " + e);
+                e.printStackTrace();
+                concurrentTestErrored.compareAndSet(false, true);
+            }
+        }
+    }
+
+    private static String keyForConcurrentTest(int i, boolean big) {
+        return "/" + Integer.toString(i) + (big ? "big" : "");
+    }
+
+    private static String valueForConcurrentTest(int i, boolean big) {
+        return (big ? bigJsonString : Integer.toHexString(i));
     }
 
 
