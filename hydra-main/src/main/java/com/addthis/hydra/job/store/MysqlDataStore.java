@@ -1,27 +1,17 @@
 package com.addthis.hydra.job.store;
 
-import java.util.Properties;
-
 import java.sql.Blob;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
-import com.addthis.basis.util.Parameter;
-
 public class MysqlDataStore extends JdbcDataStore {
     private static final String description = "mysql";
-    private static final Properties properties;
     private final String insertTemplate;
-    static {
-        properties = new Properties();
-        properties.put("user", Parameter.value("mysql.datastore.user", "spawn"));
-        properties.put("password", Parameter.value("mysql.datastore.password", "pw"));
-    }
 
     public MysqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
-        super("org.drizzle.jdbc.DrizzleDriver", "jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, properties, tableName);
+        super("org.drizzle.jdbc.DrizzleDriver", "jdbc:mysql:thin://" + host + ":" + port + "/" + dbName, tableName);
         if (host == null || dbName == null || tableName == null) {
             throw new IllegalArgumentException("Null dbName/tableName passed to JdbcDataStore");
         }

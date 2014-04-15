@@ -44,14 +44,14 @@ public class DataStoreUtil {
 
     private static final Logger log = LoggerFactory.getLogger(DataStoreUtil.class);
 
-    private static final String canonicalDataStoreType = Parameter.value("spawn.jdbc.store.type", "ZK");
+    private static final String canonicalDataStoreType = Parameter.value("spawn.jdbc.store.type", "MYSQL");
     private static final String h2DbPath = Parameter.value("spawn.jdbc.db.path", "etc/spawndatastore");
-    private static final String tableName = Parameter.value("spawn.table.name", "datastoretable");
-    private static final String mysqlDbName = Parameter.value("spawn.mysql.db.name", "spawndatastore");
-    private static final String mysqlHostName = Parameter.value("spawn.mysql.host", "localhost");
-    private static final int mysqlPort = Parameter.intValue("spawn.mysql.port", 3306);
+    private static final String tableName = Parameter.value("spawn.table.name", "spawndatastoretable");
+    private static final String sqlDbName = Parameter.value("spawn.sql.db.name", "spawndatastore");
+    private static final String sqlHostName = Parameter.value("spawn.sql.host", "localhost");
+    private static final int sqlPort = Parameter.intValue("spawn.sql.port", 3306);
 
-    public static enum DataStoreType {ZK, MYSQL, H2}
+    public static enum DataStoreType {ZK, MYSQL, H2, POSTGRES}
 
     /**
      * Create the canonical SpawnDataStore based on the system parameters
@@ -65,8 +65,9 @@ public class DataStoreUtil {
     public static SpawnDataStore makeSpawnDataStore(DataStoreType type) throws Exception {
         switch (type) {
             case ZK: return new ZookeeperDataStore(null);
-            case MYSQL: return new MysqlDataStore(mysqlHostName, mysqlPort, mysqlDbName, tableName);
+            case MYSQL: return new MysqlDataStore(sqlHostName, sqlPort, sqlDbName, tableName);
             case H2: return new H2DataStore(h2DbPath, tableName);
+            case POSTGRES: return new PostgresqlDataStore(sqlHostName, sqlPort, sqlDbName, tableName);
             default: throw new IllegalArgumentException("Unexpected DataStoreType " + type);
         }
     }

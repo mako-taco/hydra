@@ -1,7 +1,5 @@
 package com.addthis.hydra.job.store;
 
-import java.util.Properties;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -12,7 +10,7 @@ public class PostgresqlDataStore extends JdbcDataStore {
     private final String insertTemplate;
 
     public PostgresqlDataStore(String host, int port, String dbName, String tableName) throws Exception {
-        super("org.postgresql.Driver", "jdbc:postgresql://" + host + ":" + port + "/" + dbName, new Properties(), tableName);
+        super("org.postgresql.Driver", "jdbc:postgresql://" + host + ":" + port + "/" + dbName, tableName);
         insertTemplate = "WITH new_values (" + pathKey + ", " + valueKey + ", " + childKey + ") as (values (?, ?, ?)),\n" +
                          "upsert as( \n" +
                          "    update " + tableName + " m \n" +
