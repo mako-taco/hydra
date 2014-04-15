@@ -74,7 +74,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
         try (Connection connection = getConnection()){
             PreparedStatement preparedStatement = connection.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey + "=?");
             preparedStatement.setString(1, path);
-            return getSingleResult(preparedStatement.executeQuery());
+            return getSingleResult(executeQuery(preparedStatement));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -99,7 +99,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
             for (String path : paths) {
                 preparedStatement.setString(j++, path);
             }
-            ResultSet resultSet = preparedStatement.executeQuery();
+            ResultSet resultSet = executeQuery(preparedStatement);
             resultSet.next();
             do {
                 Blob blob =  resultSet.getBlob(valueKey);
@@ -174,13 +174,18 @@ public abstract class JdbcDataStore implements SpawnDataStore {
         return firstResult;
     }
 
+    protected ResultSet executeQuery(PreparedStatement preparedStatement) throws SQLException {
+        // Needs to be overwritted in h2 to avoid a concurrency bug
+        return preparedStatement.executeQuery();
+    }
+
     @Override
     public String getChild(String parent, String childId) throws Exception {
         try (Connection connection = getConnection()) {
             PreparedStatement preparedStatement = connection.prepareStatement("select " + valueKey + " from " + tableName + " where " + pathKey + "=? and " + childKey + "=?");
             preparedStatement.setString(1, parent);
             preparedStatement.setString(2, childId);
-            return getSingleResult(preparedStatement.executeQuery());
+            return getSingleResult(executeQuery(preparedStatement));
         }
 
 
@@ -207,6 +212,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
             PreparedStatement preparedStatement = connection.prepareStatement(deleteTemplate);
             preparedStatement.setString(1, path);
             preparedStatement.execute();
+            connection.commit();
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }
@@ -219,7 +225,7 @@ public abstract class JdbcDataStore implements SpawnDataStore {
     protected ResultSet getResultsForQuery(Connection connection, String template, String path) throws SQLException {
         PreparedStatement preparedStatement = connection.prepareStatement(template);
         preparedStatement.setString(1, path);
-        ResultSet resultSet = preparedStatement.executeQuery();
+        ResultSet resultSet = executeQuery(preparedStatement);
         boolean foundRows = resultSet.next();
         if (!foundRows) {
             return null;

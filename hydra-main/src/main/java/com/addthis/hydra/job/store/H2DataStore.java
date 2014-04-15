@@ -4,6 +4,7 @@ import java.util.Properties;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class H2DataStore extends JdbcDataStore {
@@ -19,7 +20,6 @@ public class H2DataStore extends JdbcDataStore {
                          "(" + pathKey + "," + valueKey + "," + childKey + ") " +
                          "values( ? , ? , ? )";
         runStartupCommand();
-
     }
 
     @Override
@@ -31,6 +31,13 @@ public class H2DataStore extends JdbcDataStore {
             preparedStatement.setString(3, childId != null ? childId : blankChildId);
             preparedStatement.execute();
             connection.commit();
+        }
+    }
+
+    @Override
+    protected ResultSet executeQuery(PreparedStatement preparedStatement) throws SQLException {
+        synchronized (this) {
+            return super.executeQuery(preparedStatement);
         }
     }
 
