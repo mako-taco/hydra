@@ -13,101 +13,112 @@
  */
 package com.addthis.hydra.data.util;
 
+import java.util.AbstractMap;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
 import com.addthis.codec.Codec;
 
+import com.carrotsearch.hppc.ObjectIntOpenHashMap;
 
-/**
- * Class that helps maintain a top N list for any String Map TODO should move
- * into basis libraries
- */
 public final class KeyTopper implements Codec.Codable {
 
     public KeyTopper() {
+        values = new long[0];
+        locations = new ObjectIntOpenHashMap<>(0);
+        names = new String[0];
+        size = 0;
     }
 
-    @Codec.Set(codable = true, required = true)
+    /**
+     * Is not used during the lifetime of the object.
+     * Used for backwards compatibility when decoding an object.
+     */
+    @Codec.Set(codable = true)
     private HashMap<String, Long> map;
+
+    /**
+     * Is not used during the lifetime of the object.
+     * Used for backwards compatibility when decoding an object.
+     */
     @Codec.Set(codable = true)
     private long minVal;
+
+    /**
+     * Is not used during the lifetime of the object.
+     * Used for backwards compatibility when decoding an object.
+     */
     @Codec.Set(codable = true)
     private String minKey;
+
+    /**
+     * Is not used during the lifetime of the object.
+     * Used for backwards compatibility when decoding an object.
+     */
     @Codec.Set(codable = true)
     private boolean lossy;
 
+
+    /**
+     * These fields are used by the class. Any other
+     * fields are for backwards compatibility.
+     * values are stored in reverse sorted order.
+     * locations assign strings to positions in the values array.
+     * names is used to associate positions back into their keys.
+     * size represents the number of items currently in the object.
+     */
+    private long[] values;
+    private ObjectIntOpenHashMap<String> locations;
+    private String[] names;
+    private int size;
+    
     @Override
     public String toString() {
-        return "topper(min:" + minKey + "=" + minVal + "->" + map.toString() + ",lossy:" + lossy + ")";
+        return "topper(" + Arrays.toString(values) + ")";
     }
 
     public KeyTopper init() {
-        map = new HashMap<String, Long>();
         return this;
-    }
-
-    public KeyTopper setLossy(boolean isLossy) {
-        lossy = isLossy;
-        return this;
-    }
-
-    public boolean isLossy() {
-        return lossy;
-    }
-
-    public int size() {
-        return map.size();
-    }
-
-    public Long get(String key) {
-        return map.get(key);
     }
 
     /**
      * returns the list sorted by greatest to least count.
      */
-    @SuppressWarnings("unchecked")
     public Map.Entry<String, Long>[] getSortedEntries() {
-        Map.Entry e[] = new Map.Entry[map.size()];
-        e = map.entrySet().toArray(e);
-        Arrays.sort(e, new Comparator() {
-            public int compare(Object arg0, Object arg1) {
-                return (int) (((Long) ((Map.Entry) arg1).getValue()) - ((Long) ((Map.Entry) arg0).getValue()));
-            }
-        });
+        Map.Entry<String, Long> e[] = new Map.Entry[size];
+        for(int i = 0; i < size; i++) {
+            e[i] = new AbstractMap.SimpleImmutableEntry<>(names[size - i - 1], values[size - i - 1]);
+        }
         return e;
     }
 
-    /** */
-    private void recalcMin(boolean maxed, boolean newentry, String id) {
-        if (minKey == null || (maxed && newentry) || (!newentry && id.equals(minKey))) {
-            minVal = 0;
-            for (Map.Entry<String, Long> e : this.map.entrySet()) {
-                if (minVal == 0 || e.getValue() < minVal) {
-                    minVal = e.getValue();
-                    minKey = e.getKey();
-                }
-            }
+    /**
+     * Resize the collections when necessary.
+     * If there is remaining capacity in the data structure then do not resize.
+     * If the new size is less than or equal to the current capacity then do not resize.
+     * Otherwise adjust the capacity to the new size.
+     *
+     * @param newsize
+     */
+    private void resize(int newsize) {
+        if (size < values.length || newsize <= values.length) {
+            return;
         }
+        long[] newValues = new long[newsize];
+        ObjectIntOpenHashMap<String> newLocations = new ObjectIntOpenHashMap<>(newsize);
+        String[] newNames = new String[newsize];
+        System.arraycopy(values, 0, newValues, 0, size);
+        System.arraycopy(names, 0, newNames, 0, size);
+        newLocations.putAll(locations);
+        values = newValues;
+        names = newNames;
+        locations = newLocations;
     }
 
-    /**
-     * Adds 'ID' the top N if: 1) there are more empty slots or 2) count >
-     * smallest top count in the list
-     *
-     * @param id
-     * @return element dropped from top or null if accepted into top with no
-     *         drops
-     */
+
     public String increment(String id, int maxsize) {
-        Long count = map.get(id);
-        if (count == null) {
-            count = Math.max(lossy && (map.size() >= maxsize) ? minVal - 1 : 0L, 0L);
-        }
-        return update(id, count + 1, maxsize);
+        return increment(id, 1, maxsize);
     }
 
     /**
@@ -121,87 +132,72 @@ public final class KeyTopper implements Codec.Codable {
      *         drops
      */
     public String increment(String id, int weight, int maxsize) {
-        Long count = map.get(id);
-
-        if (count == null) {
-            count = Math.max(lossy && (map.size() >= maxsize) ? minVal - 1 : 0L, 0L);
+        int position = locations.getOrDefault(id, -1);
+        if (position >= 0) {
+            values[position] += weight;
+            return null;
         }
-
-        return update(id, count + weight, maxsize);
-    }
-
-    public String decrement(String id, int maxsize) {
-        Long count = map.get(id);
-        if (count == null) {
-            count = Math.max(lossy && (map.size() >= maxsize) ? minVal + 1 : 0L, 0L);
+        resize(maxsize);
+        if (size < values.length) {
+            values[size] = weight;
+            names[size] = id;
+            locations.put(id, size);
+            size++;
+            return null;
         }
-        return update(id, count - 1, maxsize);
+        position = selectMinElement();
     }
 
     /**
      * Increments the count for 'ID' in the top map if 'ID' already exists in
-     * the map. This method is used if you want to increment a lossy top without
-     * removing an element. Used when there is a two stage update for new data
-     * elements
+     * the map.
      *
      * @param id the id to increment if it already exists in the map
      * @return whether the element was in the map
      */
     public boolean incrementExisting(String id) {
-        if (map.containsKey(id)) {
-            map.put(id, get(id) + 1);
+        int position = locations.getOrDefault(id, -1);
+        if (position >= 0) {
+            values[position]++;
             return true;
+        } else {
+            return false;
         }
-        return false;
     }
 
     /**
-     * Adds 'ID' the top N if: 1) there are more empty slots or 2) count >
-     * smallest top count in the list
-     *
-     * @param id
-     * @param count
-     * @return element dropped from top or null if accepted into top with no
-     *         drops. returns the offered key if it was rejected for update
-     *         or inclusion in the top.
-     */
+      * Adds 'ID' the top N if: 1) there are more empty slots or 2) count >
+      * smallest top count in the list
+      *
+      * @param id
+      * @param count
+      * @return element dropped from top or null if accepted into top with no
+      *         drops. returns the offered key if it was rejected for update
+      *         or inclusion in the top.
+      */
     public String update(String id, long count, int maxsize) {
-        String removed = null;
-        /** should go into top */
-        if (count >= minVal) {
-            boolean newentry = map.get(id) == null;
-            boolean maxed = map.size() >= maxsize;
-            // only remove if topN is full and we're not updating an existing entry
-            if (maxed && newentry) {
-                if (minKey == null && minVal == 0) {
-                    recalcMin(maxed, newentry, id);
-                }
-                map.remove(minKey);
-                removed = minKey;
-            }
-            // update or add entry
-            map.put(id, count);
-            // recalc min *only* if the min entry was removed or updated
-            // checking for null minkey is critical check for empty topN as it
-            // sets first min
-            if (count == minVal) {
-                minKey = id;
-            } else {
-                recalcMin(maxed, newentry, id);
-            }
+        int position = locations.getOrDefault(id, -1);
+        if (position >= 0) {
+            values[size] = count;
+            return null;
         }
-        /** should go into top */
-        else if (map.size() < maxsize) {
-            map.put(id, count);
-            if (minKey == null || count < minVal) {
-                minKey = id;
-                minVal = count;
-            }
+        resize(maxsize);
+        if (size < values.length) {
+            values[size] = count;
+            locations.put(id, size);
+            names[size] = id;
+            size++;
+            return null;
+        } else if (count <= values[size - 1]) {
+            return id;
+        } else {
+            String dropped = names[size - 1];
+
+            return dropped;
         }
-        /** not eligible for top */
-        else {
-            removed = id;
-        }
-        return removed;
+    }
+
+    public int size() {
+        return size;
     }
 }

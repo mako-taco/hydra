@@ -83,6 +83,11 @@
       <artifactId>compress-lzf</artifactId>
       <version>${hydra.dep.compress.compress-lzf.version}</version>
     </dependency>
+    <dependency>
+      <groupId>com.carrotsearch</groupId>
+      <artifactId>hppc</artifactId>
+      <version>0.6.0</version>
+    </dependency>
     <!-- end 3rd party -->
 
     <dependency>
