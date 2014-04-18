@@ -13,17 +13,44 @@
  */
 package com.addthis.hydra.data.util;
 
+import java.io.UnsupportedEncodingException;
+
 import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Random;
+import java.util.SortedMap;
+import java.util.TreeMap;
+
+import com.addthis.basis.util.Varint;
 
 import com.addthis.codec.Codec;
 
 import com.carrotsearch.hppc.ObjectIntOpenHashMap;
 
-public final class KeyTopper implements Codec.Codable {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.buffer.Unpooled;
+
+public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec.BytesCodable {
+
+    private static final byte[] EMPTY = new byte[0];
+
+    /**
+     * Some explanation is necessary. The legacy binary encoding format is to store
+     * an unordered collection of items. The new encoding format stores an
+     * ordered collection of items. We store a UTF-8 continuation character
+     * as the first byte of the first key to signal that we are using the
+     * new encoding scheme. A continuation character can never appear as the
+     * first byte of a valid UTF-8 string.
+     */
+    static final int CONTINUATION_BYTE = 128;
+
+    private static final Logger log = LoggerFactory.getLogger(KeyTopper.class);
 
     /**
      * Construct a top-K counter with a size of zero.
@@ -77,7 +104,14 @@ public final class KeyTopper implements Codec.Codable {
     private long[] values;
     private ObjectIntOpenHashMap<String> locations;
     private int size;
-    private Random random;
+
+    /**
+     * Select a candidate for eviction when N multiple values are the
+     * minimum. Can be replaced with (key.hash() % N) if this is
+     * a bottleneck. The downside of key.hash() is that it biases
+     * the selection based on distribution of keys.
+     */
+    private final Random random;
     
     @Override
     public String toString() {
@@ -93,7 +127,7 @@ public final class KeyTopper implements Codec.Codable {
     public Map.Entry<String, Long>[] getSortedEntries() {
         Map.Entry<String, Long> e[] = new Map.Entry[size];
         for(int i = 0; i < size; i++) {
-            e[i] = new AbstractMap.SimpleImmutableEntry<>(keys[size - i - 1], values[size - i - 1]);
+            e[i] = new AbstractMap.SimpleImmutableEntry<>(keys[i], values[i]);
         }
         return e;
     }
@@ -311,5 +345,127 @@ public final class KeyTopper implements Codec.Codable {
         } else {
             return null;
         }
+    }
+
+    @Override
+    public byte[] bytesEncode(long version) {
+        if (size == 0) {
+            return EMPTY;
+        }
+        byte[] retBytes = null;
+        ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
+        try {
+            Varint.writeUnsignedVarInt(size, byteBuf);
+            for(int i = 0; i < size; i++) {
+                String key = keys[i];
+                long value = values[i];
+                byte[] keyBytes = key.getBytes("UTF-8");
+                Varint.writeUnsignedVarInt(keyBytes.length, byteBuf);
+                // See explanation above regarding the usage of CONTINUATION_BYTE
+                if (i == 0) {
+                    byteBuf.writeByte(CONTINUATION_BYTE);
+                }
+                byteBuf.writeBytes(keyBytes);
+                Varint.writeUnsignedVarLong(value, byteBuf);
+            }
+            retBytes = new byte[byteBuf.readableBytes()];
+            byteBuf.readBytes(retBytes);
+        } catch (UnsupportedEncodingException e) {
+            log.error("Error in KeyTopper encoding: ", e);
+            throw new RuntimeException(e);
+        } finally {
+            byteBuf.release();
+        }
+        return retBytes;
+    }
+
+    @Override
+    public void bytesDecode(byte[] b, long version) {
+        if (b.length == 0) {
+            return;
+        }
+        ByteBuf byteBuf = Unpooled.wrappedBuffer(b);
+        try {
+            resize(Varint.readUnsignedVarInt(byteBuf));
+            int keyLength = Varint.readUnsignedVarInt(byteBuf);
+            byte[] keyBytes = new byte[keyLength];
+            int testByte = byteBuf.getByte(byteBuf.readerIndex());
+            // See explanation above regarding the usage of CONTINUATION_BYTE
+            if (((testByte & 0xff) >>> 6) == 2) {
+                byteBuf.readByte();
+                byteBuf.readBytes(keyBytes);
+                String key = new String(keyBytes, "UTF-8");
+                long value = Varint.readUnsignedVarLong(byteBuf);
+                keys[0] = key;
+                values[0] = value;
+                locations.put(key, 0);
+                for (int i = 1; i < size; i++) {
+                    keyLength = Varint.readUnsignedVarInt(byteBuf);
+                    if (keyBytes.length != keyLength) {
+                        keyBytes = new byte[keyLength];
+                    }
+                    byteBuf.readBytes(keyBytes);
+                    key = new String(keyBytes, "UTF-8");
+                    value = Varint.readUnsignedVarLong(byteBuf);
+                    keys[i] = key;
+                    values[i] = value;
+                    locations.put(key, i);
+                }
+            } else {
+                SortedMap<Long, String> order = new TreeMap<>();
+                byteBuf.readBytes(keyBytes);
+                String key = new String(keyBytes, "UTF-8");
+                long value = Varint.readUnsignedVarLong(byteBuf);
+                order.put(value, key);
+                for (int i = 1; i < size; i++) {
+                    keyLength = Varint.readUnsignedVarInt(byteBuf);
+                    if (keyBytes.length != keyLength) {
+                        keyBytes = new byte[keyLength];
+                    }
+                    byteBuf.readBytes(keyBytes);
+                    key = new String(keyBytes, "UTF-8");
+                    value = Varint.readUnsignedVarLong(byteBuf);
+                    order.put(value, key);
+                }
+                translateOrderedMap(order);
+            }
+        } catch (UnsupportedEncodingException ex) {
+            log.error("KeyTopper decoding error: ", ex);
+            throw new RuntimeException(ex);
+        } finally {
+            byteBuf.release();
+        }
+    }
+
+    /**
+     * The {@link #bytesEncode(long)} method does not need any
+     * behavior from this method.
+     */
+    @Override
+    public void preEncode() {}
+
+    private void translateOrderedMap(SortedMap<Long, String> order) {
+        int index = size - 1;
+        for (Map.Entry<Long, String> entry : order.entrySet()) {
+            values[index] = entry.getKey();
+            keys[index] = entry.getValue();
+            locations.put(entry.getValue(), index);
+            index--;
+        }
+    }
+
+    /**
+     * This method is responsible for converting the old legacy fields
+     * {@link #map}, {@link #minVal} and {@link #minKey} into the new
+     * fields.
+     **/
+    @Override
+    public void postDecode() {
+        resize(map.size());
+        SortedMap<Long, String> order = new TreeMap<>();
+        for (Map.Entry<String, Long> entry : map.entrySet()) {
+            order.put(entry.getValue(), entry.getKey());
+        }
+        translateOrderedMap(order);
     }
 }

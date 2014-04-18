@@ -13,13 +13,36 @@
  */
 package com.addthis.hydra.data.util;
 
+import java.nio.charset.Charset;
+
+import com.google.common.base.Charsets;
+
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 public class TestKeyTopper {
+
+    /**
+     * The commented out line are to illustrate that the continuation
+     * prefix is "10xxxxxx".
+     */
+    @Test
+    public void testContinuationByte() {
+        Charset charset = Charsets.UTF_8;
+        assertTrue(((KeyTopper.CONTINUATION_BYTE & 0xff) >>> 6) == 2);
+        for (int i = Character.MIN_VALUE; i < Character.MAX_VALUE; i++) {
+            String s = Character.toString((char) i);
+            byte[] encoded = s.getBytes(charset);
+            //assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 0);
+            //assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 1);
+            assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 2);
+            //assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 3);
+        }
+    }
 
     @Test
     public void testIncrementNoEviction() {
