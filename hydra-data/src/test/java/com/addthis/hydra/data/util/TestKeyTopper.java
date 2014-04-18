@@ -13,6 +13,8 @@
  */
 package com.addthis.hydra.data.util;
 
+import java.util.HashSet;
+
 import java.nio.charset.Charset;
 
 import com.addthis.codec.CodecBin2;
@@ -22,28 +24,28 @@ import com.google.common.base.Charsets;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 public class TestKeyTopper {
 
-    /**
-     * The commented out line are to illustrate that the continuation
-     * prefix is "10xxxxxx".
-     */
     @Test
     public void testContinuationByte() {
         Charset charset = Charsets.UTF_8;
         assertTrue(((KeyTopper.CONTINUATION_BYTE & 0xff) >>> 6) == 2);
+        HashSet<Integer> prefixes = new HashSet<>();
         for (int i = Character.MIN_VALUE; i < Character.MAX_VALUE; i++) {
             String s = Character.toString((char) i);
             byte[] encoded = s.getBytes(charset);
-            //assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 0);
-            //assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 1);
-            assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 2);
-            //assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 3);
+            prefixes.add((encoded[0] & 0xff) >>> 6);
         }
+        assertEquals(3, prefixes.size());
+        assertTrue(prefixes.contains(0));
+        assertTrue(prefixes.contains(1));
+        assertFalse(prefixes.contains(2));
+        assertTrue(prefixes.contains(3));
     }
 
     @Test
