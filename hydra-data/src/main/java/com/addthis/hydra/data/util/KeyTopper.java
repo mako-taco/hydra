@@ -386,7 +386,9 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
         }
         ByteBuf byteBuf = Unpooled.wrappedBuffer(b);
         try {
-            resize(Varint.readUnsignedVarInt(byteBuf));
+            int newsize = Varint.readUnsignedVarInt(byteBuf);
+            resize(newsize);
+            size = newsize;
             int keyLength = Varint.readUnsignedVarInt(byteBuf);
             byte[] keyBytes = new byte[keyLength];
             int testByte = byteBuf.getByte(byteBuf.readerIndex());
@@ -461,7 +463,9 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
      **/
     @Override
     public void postDecode() {
-        resize(map.size());
+        int newsize = map.size();
+        resize(newsize);
+        size = newsize;
         SortedMap<Long, String> order = new TreeMap<>();
         for (Map.Entry<String, Long> entry : map.entrySet()) {
             order.put(entry.getValue(), entry.getKey());

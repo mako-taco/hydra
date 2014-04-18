@@ -15,6 +15,8 @@ package com.addthis.hydra.data.util;
 
 import java.nio.charset.Charset;
 
+import com.addthis.codec.CodecBin2;
+
 import com.google.common.base.Charsets;
 
 import org.junit.Test;
@@ -42,6 +44,69 @@ public class TestKeyTopper {
             assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 2);
             //assertTrue("At " + i, ((encoded[0] & 0xff) >>> 6) != 3);
         }
+    }
+
+    @Test
+    public void testConcurrentToSequentialCodableUpgrade() throws Exception {
+        CodecBin2 codec = new CodecBin2();
+        ConcurrentKeyTopper input = new ConcurrentKeyTopper();
+        input.init();
+        input.increment("a", 1, 5);
+        input.increment("b", 2, 5);
+        input.increment("c", 3, 5);
+        input.increment("d", 4, 5);
+        byte[] serialized = codec.encode(input);
+        KeyTopper output = codec.decode(KeyTopper.class, serialized);
+        assertEquals(4, output.size());
+        assertEquals(new Long(1), output.get("a"));
+        assertEquals(new Long(2), output.get("b"));
+        assertEquals(new Long(3), output.get("c"));
+        assertEquals(new Long(4), output.get("d"));
+    }
+
+    @Test
+    public void testConcurrentToSequentialBytesCodableUpgrade() throws Exception {
+        ConcurrentKeyTopper input = new ConcurrentKeyTopper();
+        input.init();
+        input.increment("a", 1, 5);
+        input.increment("b", 2, 5);
+        input.increment("c", 3, 5);
+        input.increment("d", 4, 5);
+        byte[] serialized = input.bytesEncode(0);
+        KeyTopper output = new KeyTopper();
+        output.bytesDecode(serialized, 0);
+        assertEquals(4, output.size());
+        assertEquals(new Long(1), output.get("a"));
+        assertEquals(new Long(2), output.get("b"));
+        assertEquals(new Long(3), output.get("c"));
+        assertEquals(new Long(4), output.get("d"));
+    }
+
+    @Test
+    public void testEmptyBytesCodable() throws Exception {
+        KeyTopper input = new KeyTopper();
+        byte[] serialized = input.bytesEncode(0);
+        assertEquals(0, serialized.length);
+        KeyTopper output = new KeyTopper();
+        output.bytesDecode(serialized, 0);
+        assertEquals(0, output.size());
+    }
+
+    @Test
+    public void testNonEmptyBytesCodable() throws Exception {
+        KeyTopper input = new KeyTopper();
+        input.increment("a", 1, 5);
+        input.increment("b", 2, 5);
+        input.increment("c", 3, 5);
+        input.increment("d", 4, 5);
+        byte[] serialized = input.bytesEncode(0);
+        KeyTopper output = new KeyTopper();
+        output.bytesDecode(serialized, 0);
+        assertEquals(4, output.size());
+        assertEquals(new Long(1), output.get("a"));
+        assertEquals(new Long(2), output.get("b"));
+        assertEquals(new Long(3), output.get("c"));
+        assertEquals(new Long(4), output.get("d"));
     }
 
     @Test
