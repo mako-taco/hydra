@@ -13,28 +13,13 @@
  */
 package com.addthis.hydra.data.util;
 
-import java.io.UnsupportedEncodingException;
-
-import java.util.AbstractMap;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
-import java.util.SortedMap;
-import java.util.TreeMap;
-
-import com.addthis.basis.util.Varint;
 
 import com.addthis.codec.Codec;
 
-import com.carrotsearch.hppc.ObjectIntOpenHashMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.PooledByteBufAllocator;
-import io.netty.buffer.Unpooled;
 
 public final class AltKeyTopper {
 
@@ -132,20 +117,22 @@ public final class AltKeyTopper {
         public void move() {
             if (count > next.count) {
                 remove();
-                findAndInsert(prev);
+                findAndInsert(next);
             }
         }
 
         /**
          * Find correct location and insert into the list.
          *
-         * @param prev hint of where to begin searching.
+         * @param hint where to begin searching.
          */
-        public void findAndInsert(Node prev) {
-            while (prev.next.count < count) {
-                prev = prev.next;
+        public void findAndInsert(Node hint) {
+            Node next = hint.next;
+            while (next.count < count) {
+                hint = next;
+                next = hint.next;
             }
-            insert(prev);
+            insert(hint);
         }
 
     }
