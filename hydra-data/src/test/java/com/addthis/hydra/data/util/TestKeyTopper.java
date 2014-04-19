@@ -14,6 +14,7 @@
 package com.addthis.hydra.data.util;
 
 import java.util.HashSet;
+import java.util.Map;
 
 import java.nio.charset.Charset;
 
@@ -30,23 +31,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
 public class TestKeyTopper {
-
-    @Test
-    public void testContinuationByte() {
-        Charset charset = Charsets.UTF_8;
-        assertTrue(((KeyTopper.CONTINUATION_BYTE & 0xff) >>> 6) == 2);
-        HashSet<Integer> prefixes = new HashSet<>();
-        for (int i = Character.MIN_VALUE; i < Character.MAX_VALUE; i++) {
-            String s = Character.toString((char) i);
-            byte[] encoded = s.getBytes(charset);
-            prefixes.add((encoded[0] & 0xff) >>> 6);
-        }
-        assertEquals(3, prefixes.size());
-        assertTrue(prefixes.contains(0));
-        assertTrue(prefixes.contains(1));
-        assertFalse(prefixes.contains(2));
-        assertTrue(prefixes.contains(3));
-    }
 
     @Test
     public void testConcurrentToSequentialCodableUpgrade() throws Exception {
@@ -195,6 +179,21 @@ public class TestKeyTopper {
         assertNull(topper.get(evicted));
 
         assertEquals(new Long(3), topper.get(Integer.toString(101)));
+    }
+
+    @Test
+    public void testGetSortedEntries() {
+        KeyTopper topper = new KeyTopper();
+        topper.increment("a", 40, 5);
+        topper.increment("b", 30, 5);
+        topper.increment("c", 20, 5);
+        topper.increment("d", 10, 5);
+        Map.Entry<String,Long>[] result = topper.getSortedEntries();
+        assertEquals(4, result.length);
+        assertEquals("d", result[0].getKey());
+        assertEquals("c", result[1].getKey());
+        assertEquals("b", result[2].getKey());
+        assertEquals("a", result[3].getKey());
     }
 
 }

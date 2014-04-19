@@ -19,9 +19,6 @@ import java.util.AbstractMap;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
-import java.util.SortedMap;
-import java.util.TreeMap;
 
 import com.addthis.basis.util.Varint;
 
@@ -36,19 +33,10 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 
-public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec.BytesCodable {
+public final class KeyTopper implements Codec.Codable, Codec.SuperCodable,
+        Codec.BytesCodable {
 
     private static final byte[] EMPTY = new byte[0];
-
-    /**
-     * Some explanation is necessary. The legacy binary encoding format is to store
-     * an unordered collection of items. The new encoding format stores an
-     * ordered collection of items. We store a UTF-8 continuation character
-     * as the first byte of the first key to signal that we are using the
-     * new encoding scheme. A continuation character can never appear as the
-     * first byte of a valid UTF-8 string.
-     */
-    static final int CONTINUATION_BYTE = 128;
 
     private static final Logger log = LoggerFactory.getLogger(KeyTopper.class);
 
@@ -61,7 +49,6 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
         locations = new ObjectIntOpenHashMap<>(0);
         keys = new String[0];
         size = 0;
-        random = new Random();
     }
 
     /**
@@ -105,14 +92,6 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
     private ObjectIntOpenHashMap<String> locations;
     private int size;
 
-    /**
-     * Select a candidate for eviction when N multiple values are the
-     * minimum. Can be replaced with (key.hash() % N) if this is
-     * a bottleneck. The downside of key.hash() is that it biases
-     * the selection based on distribution of keys.
-     */
-    private final Random random;
-    
     @Override
     public String toString() {
         return "topper(keys: " +
@@ -121,13 +100,36 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
                Arrays.toString(values) + ")";
     }
 
+    private static class StringLong implements Comparable<StringLong> {
+
+        private final String key;
+        private final long value;
+
+        StringLong(String key, long value) {
+            this.key = key;
+            this.value = value;
+        }
+
+        @Override
+        public int compareTo(StringLong other) {
+            return Long.compare(this.value, other.value);
+        }
+    }
+
     /**
      * returns the list sorted by greatest to least count.
+     * This is an expensive operation.
      */
     public Map.Entry<String, Long>[] getSortedEntries() {
+
         Map.Entry<String, Long> e[] = new Map.Entry[size];
+        StringLong sl[] = new StringLong[size];
         for(int i = 0; i < size; i++) {
-            e[i] = new AbstractMap.SimpleImmutableEntry<>(keys[i], values[i]);
+            sl[i] = new StringLong(keys[i], values[i]);
+        }
+        Arrays.sort(sl);
+        for(int i = 0; i < size; i++) {
+            e[i] = new AbstractMap.SimpleImmutableEntry<>(sl[i].key, sl[i].value);
         }
         return e;
     }
@@ -145,7 +147,8 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
             return;
         }
         long[] newValues = new long[newsize];
-        ObjectIntOpenHashMap<String> newLocations = new ObjectIntOpenHashMap<>((int) (newsize / 0.75), 1.0f);
+        ObjectIntOpenHashMap<String> newLocations =
+                new ObjectIntOpenHashMap<>(newsize);
         String[] newNames = new String[newsize];
         System.arraycopy(values, 0, newValues, 0, size);
         System.arraycopy(keys, 0, newNames, 0, size);
@@ -156,49 +159,18 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
     }
 
     /**
-     * The value at one position may no longer be in the correct sorted order.
-     * Test that value and move elements around to restore the sorted order.
-     *
-     * @param target index of the value that may be incorrect
-     */
-    private void reindex(int target) {
-        String key = keys[target];
-        long value = values[target];
-        int position = target;
-        while (position > 0 && value > values[position - 1]) {
-            position--;
-        }
-        if (position != target) {
-            System.arraycopy(keys, position, keys, position + 1, target - position);
-            System.arraycopy(values, position, values, position + 1, target - position);
-            for(int i = position + 1; i <= target; i++) {
-                locations.put(keys[i], i);
-            }
-            keys[position] = key;
-            values[position] = value;
-            locations.put(key, position);
-        }
-    }
-
-    /**
-     * Returns the index of the minimum value for eviction.
-     * Select randomly if there are multiple minimum values.
+     * Scan through all elements to find the minimem element.
      */
     private int selectMinElement() {
-        int position = size - 1;
-        int retval;
-        long value = values[position];
-        while (position > 0 && value == values[position - 1]) {
-            position--;
+        long minValue = Long.MAX_VALUE;
+        int position = -1;
+        for(int i = 0; i < size; i++) {
+            if (values[i] < minValue) {
+                minValue = values[i];
+                position = i;
+            }
         }
-        if (position == size - 1) {
-            retval = position;
-        } else {
-            retval = position + random.nextInt(size - 1 - position);
-        }
-        assert(retval >= 0);
-        assert(retval < values.length);
-        return retval;
+        return position;
     }
 
     /**
@@ -215,18 +187,12 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
      * @return          old key that is removed
      */
     private String replace(String id, long weight, boolean additive) {
-        // select the element for eviction
         int position = selectMinElement();
-        // ensure that the element at position (size - 1) will be evicted
         String evicted = keys[position];
-        keys[position] = keys[size - 1];
-        locations.put(keys[position], position);
         locations.remove(evicted);
-        // insert the new element
-        values[size - 1] = weight + (additive ? values[size - 1] : 0);
-        keys[size - 1] = id;
-        locations.put(id, size - 1);
-        reindex(size - 1);
+        locations.put(id, position);
+        keys[position] = id;
+        values[position] = weight + (additive ? values[position] : 0);
         return evicted;
     }
 
@@ -283,7 +249,6 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
         int position = locations.getOrDefault(id, -1);
         if (position >= 0) {
             values[position]++;
-            reindex(position);
             return true;
         } else {
             return false;
@@ -349,29 +314,31 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
 
     @Override
     public byte[] bytesEncode(long version) {
+
         if (size == 0) {
             return EMPTY;
         }
+        String key = null;
+        long value;
         byte[] retBytes = null;
         ByteBuf byteBuf = PooledByteBufAllocator.DEFAULT.buffer();
         try {
             Varint.writeUnsignedVarInt(size, byteBuf);
-            for(int i = 0; i < size; i++) {
-                String key = keys[i];
-                long value = values[i];
+            for (int index = 0; index < size; index++) {
+                key = keys[index];
+                value = values[index];
+                if (key == null) {
+                    throw new IllegalStateException("ConcurrentKeyTopper decoded null key");
+                }
                 byte[] keyBytes = key.getBytes("UTF-8");
                 Varint.writeUnsignedVarInt(keyBytes.length, byteBuf);
-                // See explanation above regarding the usage of CONTINUATION_BYTE
-                if (i == 0) {
-                    byteBuf.writeByte(CONTINUATION_BYTE);
-                }
                 byteBuf.writeBytes(keyBytes);
                 Varint.writeUnsignedVarLong(value, byteBuf);
             }
             retBytes = new byte[byteBuf.readableBytes()];
             byteBuf.readBytes(retBytes);
         } catch (UnsupportedEncodingException e) {
-            log.error("Error in KeyTopper encoding: ", e);
+            log.error("Unexpected error while encoding \"" + key + "\"", e);
             throw new RuntimeException(e);
         } finally {
             byteBuf.release();
@@ -385,55 +352,25 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
             return;
         }
         ByteBuf byteBuf = Unpooled.wrappedBuffer(b);
+        byte[] keybytes = null;
         try {
             int newsize = Varint.readUnsignedVarInt(byteBuf);
             resize(newsize);
             size = newsize;
-            int keyLength = Varint.readUnsignedVarInt(byteBuf);
-            byte[] keyBytes = new byte[keyLength];
-            int testByte = byteBuf.getByte(byteBuf.readerIndex());
-            // See explanation above regarding the usage of CONTINUATION_BYTE
-            if (((testByte & 0xff) >>> 6) == 2) {
-                byteBuf.readByte();
-                byteBuf.readBytes(keyBytes);
-                String key = new String(keyBytes, "UTF-8");
+            for (int index = 0; index < size; index++) {
+                int keyLength = Varint.readUnsignedVarInt(byteBuf);
+                keybytes = new byte[keyLength];
+                byteBuf.readBytes(keybytes);
+                String key = new String(keybytes, "UTF-8");
                 long value = Varint.readUnsignedVarLong(byteBuf);
-                keys[0] = key;
-                values[0] = value;
-                locations.put(key, 0);
-                for (int i = 1; i < size; i++) {
-                    keyLength = Varint.readUnsignedVarInt(byteBuf);
-                    if (keyBytes.length != keyLength) {
-                        keyBytes = new byte[keyLength];
-                    }
-                    byteBuf.readBytes(keyBytes);
-                    key = new String(keyBytes, "UTF-8");
-                    value = Varint.readUnsignedVarLong(byteBuf);
-                    keys[i] = key;
-                    values[i] = value;
-                    locations.put(key, i);
-                }
-            } else {
-                SortedMap<Long, String> order = new TreeMap<>();
-                byteBuf.readBytes(keyBytes);
-                String key = new String(keyBytes, "UTF-8");
-                long value = Varint.readUnsignedVarLong(byteBuf);
-                order.put(value, key);
-                for (int i = 1; i < size; i++) {
-                    keyLength = Varint.readUnsignedVarInt(byteBuf);
-                    if (keyBytes.length != keyLength) {
-                        keyBytes = new byte[keyLength];
-                    }
-                    byteBuf.readBytes(keyBytes);
-                    key = new String(keyBytes, "UTF-8");
-                    value = Varint.readUnsignedVarLong(byteBuf);
-                    order.put(value, key);
-                }
-                translateOrderedMap(order);
+                keys[index] = key;
+                values[index] = value;
+                locations.put(key, index);
             }
-        } catch (UnsupportedEncodingException ex) {
-            log.error("KeyTopper decoding error: ", ex);
-            throw new RuntimeException(ex);
+        } catch (UnsupportedEncodingException e) {
+            log.error("Unexpected error while decoding \"" +
+                      Arrays.toString(keybytes) + "\"", e);
+            throw new RuntimeException(e);
         } finally {
             byteBuf.release();
         }
@@ -446,16 +383,6 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
     @Override
     public void preEncode() {}
 
-    private void translateOrderedMap(SortedMap<Long, String> order) {
-        int index = size - 1;
-        for (Map.Entry<Long, String> entry : order.entrySet()) {
-            values[index] = entry.getKey();
-            keys[index] = entry.getValue();
-            locations.put(entry.getValue(), index);
-            index--;
-        }
-    }
-
     /**
      * This method is responsible for converting the old legacy fields
      * {@link #map}, {@link #minVal} and {@link #minKey} into the new
@@ -466,10 +393,13 @@ public final class KeyTopper implements Codec.Codable, Codec.SuperCodable, Codec
         int newsize = map.size();
         resize(newsize);
         size = newsize;
-        SortedMap<Long, String> order = new TreeMap<>();
+        int index = 0;
         for (Map.Entry<String, Long> entry : map.entrySet()) {
-            order.put(entry.getValue(), entry.getKey());
+            keys[index] = entry.getKey();
+            values[index] = entry.getValue();
+            locations.put(entry.getKey(), index);
+            index++;
         }
-        translateOrderedMap(order);
+        map = null;
     }
 }
