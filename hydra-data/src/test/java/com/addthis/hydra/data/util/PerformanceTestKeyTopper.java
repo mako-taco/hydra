@@ -46,11 +46,11 @@ public class PerformanceTestKeyTopper {
             }
         }
         endTime = System.currentTimeMillis();
-        if (print) System.out.println("AltKeyTopper" + "\t\t\t\t" + count +
+        if (print) System.out.println("AltKeyTopper" + "\t\t\t" + count +
                            "\t" + topK + "\t" + distribution +
                            "\t" + (endTime - startTime));
         System.gc();
-        AltKeyTopper keyTopper = new AltKeyTopper();
+        KeyTopper keyTopper = new KeyTopper();
         startTime = System.currentTimeMillis();
         for(int j = 0; j < repeat; j++) {
             for (int i = 0; i < count; i++) {
